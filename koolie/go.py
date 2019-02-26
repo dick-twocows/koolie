@@ -64,11 +64,8 @@ def zookeeper_test(args):
 def zookeeper_watch(args):
     watch = koolie.zookeeper_api.node_watch.EchoNodeWatch(args)
     try:
-        watch.start()
         try:
-            while True:
-                time.sleep(10)
-                print('.')
+            watch.start()
         finally:
             watch.stop()
     except Exception as exception:
