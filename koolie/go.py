@@ -1,6 +1,8 @@
 import argparse
 import koolie.nginx.zookeeper
 import koolie.version
+import koolie.zookeeper_api.using_kazoo
+import koolie.zookeeper_api.node_watch
 import logging
 import os
 import signal
@@ -13,8 +15,8 @@ signalled_to_exit = False
 
 
 def signal_to_exit(signum, frame):
-    global signalled_to_exit
-    signalled_to_exit = True
+    koolie.go.signalled_to_exit = True
+    print(koolie.go.signalled_to_exit)
     print('Waiting to exit...', file=sys.stdout, flush=True)
 
 
@@ -28,6 +30,7 @@ NGINX_UPSTREAMS_DIRECTORY = '{}upstreams/'.format(NGINX_DIRECTORY)
 
 ZOOKEEPER_HOSTS = 'zookeeper.default.svc.cluster.local'
 ZOOKEEPER_KUBERNETES_PODS = '/koolie/pods/'
+ZOOKEEPER_ROOT_NODE = '/'
 
 
 def default(name, value) -> str:
@@ -47,6 +50,29 @@ def sleep(args):
 
 def nginx_consume_zookeeper(args):
     koolie.nginx.zookeeper.Consume().args(args).start()
+
+
+def zookeeper_test(args):
+    zookeeper = koolie.zookeeper_api.using_kazoo.ZooKeeper(args)
+    try:
+        zookeeper.open()
+        zookeeper.close()
+    except Exception as exception:
+        _logger.warning('Test failed [{}]'.format(exception))
+
+
+def zookeeper_watch(args):
+    watch = koolie.zookeeper_api.node_watch.EchoNodeWatch(args)
+    try:
+        watch.start()
+        try:
+            while True:
+                time.sleep(10)
+                print('.')
+        finally:
+            watch.stop()
+    except Exception as exception:
+        _logger.warning('Test failed [{}]'.format(exception))
 
 
 parser = argparse.ArgumentParser(description='Koolie CLI')
@@ -87,6 +113,21 @@ nginx_consume_zookeeper_parser = nginx_consume_subparsers.add_parser('zookeeper'
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-hosts', type=str, default=default('ZOOKEEPER_HOSTS', ZOOKEEPER_HOSTS))
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-kubernetes-pods', type=str, default=default('ZOOKEEPER_KUBERNETES_PODS', ZOOKEEPER_KUBERNETES_PODS))
 nginx_consume_zookeeper_parser.set_defaults(func=nginx_consume_zookeeper)
+
+# ZooKeeper
+
+zookeeper_parser = subparsers.add_parser('zookeeper', help='ZooKeeper')
+zookeeper_parser.add_argument('--zookeeper-hosts', type=str, default=default('ZOOKEEPER_HOSTS', ZOOKEEPER_HOSTS))
+zookeeper_parser.set_defaults(func=suffix_help, hep_prefix='zookeeper')
+
+zookeeper_subparsers = zookeeper_parser.add_subparsers()
+
+zookeeper_test_parser = zookeeper_subparsers.add_parser('test', help='Test')
+zookeeper_test_parser.set_defaults(func=zookeeper_test)
+
+zookeeper_watch_parser = zookeeper_subparsers.add_parser('watch', help='Watch')
+zookeeper_watch_parser.add_argument('--zookeeper-node-path', type=str, default=default('ZOOKEEPER_NODE_PATH', ZOOKEEPER_ROOT_NODE))
+zookeeper_watch_parser.set_defaults(func=zookeeper_watch)
 
 
 if __name__ == '__main__':
