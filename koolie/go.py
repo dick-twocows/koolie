@@ -91,7 +91,7 @@ nginx_consume_zookeeper_parser.set_defaults(func=nginx_consume_zookeeper)
 
 if __name__ == '__main__':
     # args = parser.parse_args(args='nginx watch zookeeper --zookeeper-hosts=foo'.split())
-    args = parser.parse_args(args='sleep'.split())
+    args = parser.parse_args()
 
     logging.basicConfig(stream=sys.stdout, level=args.logging_level)
 
