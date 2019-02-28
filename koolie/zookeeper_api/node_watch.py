@@ -3,7 +3,7 @@ import os
 import sys
 import time
 import yaml
-
+import kazoo.protocol.states
 import koolie.go
 
 import koolie.zookeeper_api.using_kazoo
@@ -34,9 +34,8 @@ class NodeWatch(koolie.zookeeper_api.using_kazoo.WithZooKeeper):
 
                 while True:
                     time.sleep(1)
-                    print(koolie.go.signalled_to_exit)
                     if koolie.go.signalled_to_exit:
-                        _logging.info('Signal exit.')
+                        _logging.debug('Signalled to exit.')
                         break
             except KeyboardInterrupt:
                 _logging.info('Ctrl+C exit.')
@@ -94,27 +93,97 @@ class EchoNodeWatch(DeltaNodeWatch):
             _logging.info(child)
 
 
-class GetYAMLNodeWatch(DeltaNodeWatch):
+class YAMLNodeWatch(DeltaNodeWatch):
 
     def __init__(self, args):
         DeltaNodeWatch.__init__(self, args)
+        _logging.debug('YAMLNodeWatch.__init__()')
 
     def added(self, children) -> object:
         for child in children:
             _logging.info(child)
-            data: tuple = self.zoo_keeper.kazoo_client.get(self.path + child)
-            value: bytes = data[0]
-            j = yaml.load(value.decode('utf-8'))
-            _logging.debug(j)
-            if isinstance(j, list):
-                _logging.info('Items [{}]'.format(len(j)))
-                for item in j:
-                    _logging.debug('Item type [{}]'.format(type(item)))
-                    if isinstance(item, dict):
-                        _logging.info('Item type [{}] tag [{}]'.format(item.get(koolie.TYPE_KEY), item.get(koolie.TAG_KEY)))
-            else:
-                _logging.warning('Unknown type [{}]'.format(type(j)))
+            try:
+                data: tuple = self.zoo_keeper.get_node_value('{}{}'.format(self.args.zookeeper_node_path, child))
+                if isinstance(data, tuple):
+                    _logging.info('Tuple length [{}]'.format(len(data)))
+
+                    if len(data) >= 1:
+                        value: bytes = data[0]
+                        j = yaml.load(value.decode('utf-8'))
+                        _logging.debug(j)
+                        if isinstance(j, list):
+                            _logging.info('Items [{}]'.format(len(j)))
+                            for item in j:
+                                if isinstance(item, dict):
+                                    _logging.info('Item type [{}] tag [{}]'.format(item.get(koolie.go.KOOLIE_STATUS_TYPE), item.get(koolie.go.KOOLIE_STATUS_TAG)))
+                                else:
+                                    _logging.info('Item type [{}]'.format(type(item)))
+                        else:
+                            _logging.warning('Expected list got [{}]'.format(type(j)))
+
+                    if len(data) >= 2:
+                        if isinstance(data[1], kazoo.protocol.states.ZnodeStat):
+                            _logging.info('ZnodeStat [{}]'.format(data[1]))
+                        else:
+                            _logging.warning('Expected ZnodeStat got [{}]'.format(type(data[1])))
+                else:
+                    _logging.warning('Expected tuple got [{}]'.format(type(data)))
+            except Exception as exception:
+                _logging.warning('Exception [{}}'.format(exception))
 
     def removed(self, children) -> object:
         for child in children:
             _logging.info(child)
+
+
+class StatusTypeWatch(DeltaNodeWatch):
+
+    ADD = 'StatusTypeWatch_add'
+
+    REMOVE = 'StatusTypeWatch_remove'
+
+    def __init__(self, args):
+        super().__init__(args)
+        _logging.debug('StatusTypeWatch.__init__()')
+        self.__config = vars(args)
+
+    def added(self, children) -> object:
+        for child in children:
+            _logging.info(child)
+            try:
+                data: tuple = self.zoo_keeper.get_node_value('{}{}'.format(self.args.zookeeper_node_path, child))
+                if isinstance(data, tuple):
+                    _logging.info('Tuple length [{}]'.format(len(data)))
+
+                    if len(data) >= 1:
+                        value: bytes = data[0]
+                        j = yaml.load(value.decode('utf-8'))
+                        _logging.debug(j)
+                        if isinstance(j, list):
+                            _logging.info('Items [{}]'.format(len(j)))
+                            for item in j:
+                                if isinstance(item, dict):
+                                    handle = self.__config.get(StatusTypeWatch.ADD).get(item.get(koolie.go.KOOLIE_STATUS_TYPE))
+                                    if handle is None:
+                                        _logging.info('No handle for type [{}]'.format(item.get(koolie.go.KOOLIE_STATUS_TYPE)))
+                                    else:
+                                        handle(item)
+                                else:
+                                    _logging.info('Item type [{}]'.format(type(item)))
+                        else:
+                            _logging.warning('Expected list got [{}]'.format(type(j)))
+
+                    if len(data) >= 2:
+                        if isinstance(data[1], kazoo.protocol.states.ZnodeStat):
+                            _logging.info('ZnodeStat [{}]'.format(data[1]))
+                        else:
+                            _logging.warning('Expected ZnodeStat got [{}]'.format(type(data[1])))
+                else:
+                    _logging.warning('Expected tuple got [{}]'.format(type(data)))
+            except Exception as exception:
+                _logging.warning('Exception [{}]'.format(exception))
+
+
+    def removed(self, children) -> object:
+        return super().removed(children)
+
