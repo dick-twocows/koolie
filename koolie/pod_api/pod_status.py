@@ -44,22 +44,21 @@ class Status(yaml.YAMLObject):
 
 class PodStatus(koolie.zookeeper_api.using_kazoo.WithZooKeeper):
 
-    def __init__(self, args):
+    def __init__(self, **kwargs):
         _logging.debug('PodStatus.__init()')
-        koolie.zookeeper_api.using_kazoo.WithZooKeeper.__init__(self, args)
+        koolie.zookeeper_api.using_kazoo.WithZooKeeper.__init__(self, **kwargs)
 
-        self.__args = args
-        self.__config = vars(args)
+        self.__kwargs = kwargs
 
         self.__data = list
 
-        self.pod_name = self.__config.get('pod_name', str(uuid.uuid4()))
+        self.pod_name = self.__kwargs.get('pod_name', str(uuid.uuid4()))
 
         self.heartbeat = 10  # int(os.getenv(KOOLIE_POD_HEARTBEAT, KOOLIE_POD_HEARTBEAT_DEFAULT))
 
         self.node_name = self.create_node_name(self.pod_name)
 
-        self.zoo_keeper.hosts = self.__config.get('zookeeper_hosts')  # os.getenv(KOOLIE_ZOOKEEPER_HOSTS,KOOLIE_ZOOKEEPER_HOSTS_DEFAULT)
+        self.zoo_keeper.hosts = self.__kwargs.get('zookeeper_hosts')  # os.getenv(KOOLIE_ZOOKEEPER_HOSTS,KOOLIE_ZOOKEEPER_HOSTS_DEFAULT)
 
         self.__created = time.time()
         self.__status = dict()

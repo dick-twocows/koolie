@@ -1,0 +1,9 @@
+- type: "nginx/location"
+  name: "status"
+  tag: "${os_environ.hostname}"
+  server: "default"
+  config: |
+    location /status/ {
+      return 200 "ok";
+    }
+

@@ -1,27 +1,16 @@
 import argparse
 import koolie.pod_api.pod_status
+import koolie.pod_api.push_nginx_config
 import koolie.nginx.zookeeper
 import koolie.version
 import koolie.zookeeper_api.using_kazoo
 import koolie.zookeeper_api.node_watch
 import logging
 import os
-import signal
 import sys
 import time
 
 _logger = logging.getLogger(__name__)
-
-signalled_to_exit = False
-
-
-def signal_to_exit(signum, frame):
-    koolie.go.signalled_to_exit = True
-    _logger.info('Signalled to exit...')
-
-
-signal.signal(signal.SIGINT, signal_to_exit)
-signal.signal(signal.SIGTERM, signal_to_exit)
 
 
 # Koolie variables.
@@ -49,16 +38,20 @@ def suffix_help(args):
 def sleep(args):
     while True:
         time.sleep(10)
-        if signalled_to_exit:
-            break
 
 
 def nginx_consume_zookeeper(args):
     koolie.nginx.zookeeper.Consume().args(args).start()
 
 
-def pod_status(args):
-    koolie.pod_api.pod_status.PodStatus(args).start()
+def pod_status(**kwargs):
+    _logger.debug('kwargs [{}]'.format(kwargs))
+    koolie.pod_api.pod_status.PodStatus(**kwargs).start()
+
+
+def pod_push(**kwargs):
+    _logger.debug('pod_push-config({})'.format(kwargs))
+    koolie.pod_api.push_nginx_config.PushNGINXConfig(**kwargs).start()
 
 
 def zookeeper_test(args):
@@ -70,7 +63,7 @@ def zookeeper_test(args):
         _logger.warning('Test failed [{}]'.format(exception))
 
 
-def zookeeper_watch(args):
+def zookeeper_watch(**kwargs):
 
     def pod_status(child: dict):
         _logger.info('add [{}]'.format(child))
@@ -78,10 +71,9 @@ def zookeeper_watch(args):
     add = dict()
     add[koolie.pod_api.pod_status.STATUS_TYPE] = pod_status
 
-    config = vars(args)
-    config[koolie.zookeeper_api.node_watch.StatusTypeWatch.ADD] = add
+    kwargs[koolie.zookeeper_api.node_watch.StatusTypeWatch.ADD] = add
 
-    watch = koolie.zookeeper_api.node_watch.StatusTypeWatch(args)
+    watch = koolie.zookeeper_api.node_watch.StatusTypeWatch(**kwargs)
     try:
         try:
             watch.start()
@@ -111,6 +103,11 @@ pod_parser = subparsers.add_parser('pod', help='Pod')
 pod_parser.set_defaults(func=suffix_help, help_prefix='pod')
 
 pod_subparsers = pod_parser.add_subparsers()
+
+# pod push
+
+pod_push_parser = pod_subparsers.add_parser('push', help='Push')
+pod_push_parser.set_defaults(func=pod_push)
 
 # pod status
 
@@ -161,12 +158,25 @@ zookeeper_watch_parser.set_defaults(func=zookeeper_watch)
 
 if __name__ == '__main__':
     # args = parser.parse_args(args='nginx watch zookeeper --zookeeper-hosts=foo'.split())
-    args: argparse.Namespace = parser.parse_args()
+    args, unknowns = parser.parse_known_args()
+
+    result = dict(vars(args))
+
+    for arg in unknowns:
+        if arg.startswith('--'):
+            if arg.index('=') > 0:
+                result[arg[2:arg.index('=')].strip().replace('-', '_')] = arg[arg.index('=') + 1:].strip()
+            else:
+                result[arg[2:].replace('-', '_')] = True
+        else:
+            _logger.warning('Skipping [{}]'.format(arg))
+
+    result['os_environ'] = os.environ
 
     logging.basicConfig(stream=sys.stdout, level=args.logging_level)
 
     try:
-        args.func(args)
+        args.func(**result)
     except AttributeError as attribute_error:
         print('{}\n{} ...'.format(attribute_error, args))
 

@@ -1,5 +1,4 @@
 import logging
-import os
 import sys
 import time
 import yaml
@@ -14,20 +13,20 @@ _logging = logging.getLogger(__name__)
 
 class NodeWatch(koolie.zookeeper_api.using_kazoo.WithZooKeeper):
 
-    def __init__(self, args):
-        koolie.zookeeper_api.using_kazoo.WithZooKeeper.__init__(self, args)
+    def __init__(self, **kwargs):
+        koolie.zookeeper_api.using_kazoo.WithZooKeeper.__init__(self, **kwargs)
 
-        self.__args = args
+        self.__kwargs = kwargs
 
     @property
     def args(self):
-        return self.__args
+        return self.__kwargs
 
     def start(self):
         _logging.debug('NodeWatch.start()')
         if self.zoo_keeper.open():
             try:
-                @self.zoo_keeper.kazoo_client.ChildrenWatch(self.__args.zookeeper_node_path)
+                @self.zoo_keeper.kazoo_client.ChildrenWatch(self.__kwargs.get('zookeeper_node_path'))
                 def watch_children(children):
                     self.change(children)
                     return True
@@ -55,8 +54,8 @@ class NodeWatch(koolie.zookeeper_api.using_kazoo.WithZooKeeper):
 
 class DeltaNodeWatch(NodeWatch):
 
-    def __init__(self, args):
-        NodeWatch.__init__(self, args)
+    def __init__(self, **kwargs):
+        NodeWatch.__init__(self, **kwargs)
 
         self.__current = set()
 
@@ -79,8 +78,8 @@ class DeltaNodeWatch(NodeWatch):
 
 class EchoNodeWatch(DeltaNodeWatch):
 
-    def __init__(self, args):
-        DeltaNodeWatch.__init__(self, args)
+    def __init__(self, **kwargs):
+        DeltaNodeWatch.__init__(self, **kwargs)
 
     def added(self, children) -> object:
         _logging.info('EchoNodeWatch.added()')
@@ -103,7 +102,7 @@ class YAMLNodeWatch(DeltaNodeWatch):
         for child in children:
             _logging.info(child)
             try:
-                data: tuple = self.zoo_keeper.get_node_value('{}{}'.format(self.args.zookeeper_node_path, child))
+                data: tuple = self.zoo_keeper.get_node_value('{}{}'.format(self.args.get('zookeeper_node_path'), child))
                 if isinstance(data, tuple):
                     _logging.info('Tuple length [{}]'.format(len(data)))
 
@@ -142,16 +141,16 @@ class StatusTypeWatch(DeltaNodeWatch):
 
     REMOVE = 'StatusTypeWatch_remove'
 
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         _logging.debug('StatusTypeWatch.__init__()')
-        self.__config = vars(args)
+        self.__kwargs = kwargs
 
     def added(self, children) -> object:
         for child in children:
             _logging.info(child)
             try:
-                data: tuple = self.zoo_keeper.get_node_value('{}{}'.format(self.args.zookeeper_node_path, child))
+                data: tuple = self.zoo_keeper.get_node_value('{}{}'.format(self.__kwargs.get('zookeeper_node_path'), child))
                 if isinstance(data, tuple):
                     _logging.info('Tuple length [{}]'.format(len(data)))
 
@@ -163,7 +162,7 @@ class StatusTypeWatch(DeltaNodeWatch):
                             _logging.info('Items [{}]'.format(len(j)))
                             for item in j:
                                 if isinstance(item, dict):
-                                    handle = self.__config.get(StatusTypeWatch.ADD).get(item.get(koolie.go.KOOLIE_STATUS_TYPE))
+                                    handle = self.__kwargs.get(StatusTypeWatch.ADD).get(item.get(koolie.go.KOOLIE_STATUS_TYPE))
                                     if handle is None:
                                         _logging.info('No handle for type [{}]'.format(item.get(koolie.go.KOOLIE_STATUS_TYPE)))
                                     else:
@@ -182,7 +181,6 @@ class StatusTypeWatch(DeltaNodeWatch):
                     _logging.warning('Expected tuple got [{}]'.format(type(data)))
             except Exception as exception:
                 _logging.warning('Exception [{}]'.format(exception))
-
 
     def removed(self, children) -> object:
         return super().removed(children)

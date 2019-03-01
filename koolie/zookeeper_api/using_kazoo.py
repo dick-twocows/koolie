@@ -14,18 +14,14 @@ ZOOKEEPER_NODE_PATH_DEFAULT: str = '/'
 
 class ZooKeeper(object):
 
-    def __init__(self, args):
+    def __init__(self, **kwargs):
         _logging.debug('ZooKeeper.__init__()')
 
-        self.__args = args
+        self.__kwargs = kwargs
 
         self.__open: bool = False
 
         self.__kazoo_client = None
-
-    def args(self, args) -> 'ZooKeeper':
-        self.__args = args
-        return self
 
     @property
     def kazoo_client(self):
@@ -34,7 +30,7 @@ class ZooKeeper(object):
     def open(self) -> bool:
         _logging.debug('ZooKeeper.open()')
         try:
-            self.__kazoo_client = KazooClient(hosts=self.__args.zookeeper_hosts)
+            self.__kazoo_client = KazooClient(hosts=self.__kwargs.get('zookeeper_hosts'))
             self.__kazoo_client.start(timeout=5)
             self.__open = True
         except KazooException as exception:
@@ -76,9 +72,9 @@ class ZooKeeper(object):
 
 class WithZooKeeper(object):
 
-    def __init__(self, args) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__()
-        self.zoo_keeper = ZooKeeper(args)
+        self.zoo_keeper = ZooKeeper(**kwargs)
 
     @property
     def zoo_keeper(self) -> ZooKeeper:
