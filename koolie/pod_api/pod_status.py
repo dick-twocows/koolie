@@ -7,6 +7,7 @@ import uuid
 import yaml
 
 import koolie.go
+import koolie.tools.service
 import koolie.zookeeper_api.using_kazoo
 
 _logging = logging.getLogger(__name__)
@@ -18,6 +19,10 @@ STATUS_TYPE = '{}/status'.format(POD_KEY)
 STATUS_CREATED_KEY: str = 'created'  # Immutable created timestamp.
 STATUS_MODIFIED_KEY: str = 'modified'  # Changed whenever the status is modified.
 STATUS_HEARTBEAT_KEY: str = 'heartbeat'  # How often the status is updated in seconds.
+
+
+def encode_data(data) -> str:
+    return yaml.dump(data, default_flow_style=False, default_style='|').encode('utf-8')
 
 
 class Status(yaml.YAMLObject):
@@ -40,6 +45,59 @@ class Status(yaml.YAMLObject):
         dict_representation = loader.construct_mapping(node)
         val = dict_representation['val']
         return Status()
+
+
+class PushStatus(koolie.tools.service.SleepService):
+
+    TYPE = 'pod/status'
+    CREATED = 'created'
+    MODIFIED = 'modified'
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+        self.__kwargs = kwargs
+
+        self.__zoo_keeper = koolie.zookeeper_api.using_kazoo.ZooKeeper(**kwargs)
+
+        self.__path = '/koolie/pods/{}'.format(kwargs.get('k8s_pod_name', str(uuid.uuid4())))
+
+        self.__status = None
+
+    def start(self):
+        _logging.debug('start()')
+        self.__zoo_keeper.open()
+        try:
+            super().start()
+        except Exception as exception:
+            _logging.warning('Exception [{}]'.format(exception))
+        finally:
+            self.__zoo_keeper.close()
+
+    def stop(self):
+        _logging.debug('stop()')
+        super().stop()
+
+    def go(self):
+        _logging.debug('go()')
+        if self.__status is None:
+            self.__status = self.create()
+            self.__zoo_keeper.create_ephemeral_node(self.__path, encode_data(self.__status))
+        else:
+            self.__status = self.update()
+            self.__zoo_keeper.set_node_value(self.__path, encode_data(self.__status))
+        _logging.debug(self.__status)
+        super().go()
+
+    def create(self) -> dict:
+        _logging.debug('create()')
+        timestamp = time.time()
+        return {'type': PushStatus.TYPE, PushStatus.CREATED: timestamp, PushStatus.MODIFIED: timestamp, 'hostname': self.__kwargs.get('os_environ_hostname')}
+
+    def update(self) -> dict:
+        _logging.debug('update()')
+        self.__status[PushStatus.MODIFIED] = time.time()
+        return self.__status
 
 
 class PodStatus(koolie.zookeeper_api.using_kazoo.WithZooKeeper):

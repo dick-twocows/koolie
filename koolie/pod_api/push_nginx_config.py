@@ -2,7 +2,9 @@ import logging
 import string
 import yaml
 
-import koolie.tools.service
+import koolie.pod_api.pod_status
+
+print(koolie.pod_api)
 
 _logging = logging.getLogger(__name__)
 
@@ -15,13 +17,16 @@ NGINX_CONFIG_FILE: str = 'NGINX_CONFIG_FILE'
 NGINX_CONFIG_FILE_DEFAULT: str = '/koolie_old/set-nginx.yaml'
 
 
-class PushNGINXConfig(koolie.tools.service.SleepService):
+class PushNGINXConfig(koolie.pod_api.pod_status.PushStatus):
 
     POD_PUSH_CONFIG_FILE = 'pod_push_config_file'
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.__kwargs = kwargs
+
+        self.__zoo_keeper = koolie.zookeeper_api.using_kazoo.ZooKeeper(**kwargs)
+
         self.file = None
         self.file_cache = None
 

@@ -1,6 +1,6 @@
 - type: "nginx/location"
   name: "status"
-  tag: "${os_environ.hostname}"
+  tag: "${os_environ_hostname}"
   server: "default"
   config: |
     location /status/ {
