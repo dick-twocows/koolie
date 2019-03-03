@@ -25,33 +25,13 @@ def encode_data(data) -> str:
     return yaml.dump(data, default_flow_style=False, default_style='|').encode('utf-8')
 
 
-class Status(yaml.YAMLObject):
-
-    time_format = '%H:%M:%S'
-
-    def __init__(self) -> None:
-        yaml.YAMLObject.__init__(self)
-
-    @classmethod
-    def to_yaml(cls, dumper, data):
-        dict_representation = {
-            'val': 'fred'
-        }
-        node = dumper.represent_mapping(u'!A', dict_representation)
-        return node
-
-    @classmethod
-    def from_yaml(cls, loader, node):
-        dict_representation = loader.construct_mapping(node)
-        val = dict_representation['val']
-        return Status()
-
-
 class PushStatus(koolie.tools.service.SleepService):
 
     TYPE = 'pod/status'
     CREATED = 'created'
     MODIFIED = 'modified'
+
+    CONFIF_FILE = 'config_file'
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -62,7 +42,11 @@ class PushStatus(koolie.tools.service.SleepService):
 
         self.__path = '/koolie/pods/{}'.format(kwargs.get('k8s_pod_name', str(uuid.uuid4())))
 
+        self.__data = None
+
         self.__status = None
+
+        self.__config_files = None
 
     def start(self):
         _logging.debug('start()')
@@ -80,179 +64,53 @@ class PushStatus(koolie.tools.service.SleepService):
 
     def go(self):
         _logging.debug('go()')
-        if self.__status is None:
-            self.__status = self.create()
-            self.__zoo_keeper.create_ephemeral_node(self.__path, encode_data(self.__status))
+        if self.__data is None:
+            self.__data = self.create()
+            self.__zoo_keeper.create_ephemeral_node(self.__path, encode_data(self.__data))
         else:
-            self.__status = self.update()
-            self.__zoo_keeper.set_node_value(self.__path, encode_data(self.__status))
-        _logging.debug(self.__status)
+            self.__data = self.update()
+            self.__zoo_keeper.set_node_value(self.__path, encode_data(self.__data))
+        _logging.debug(self.__data)
         super().go()
 
     def create(self) -> dict:
         _logging.debug('create()')
+
+        data = list()
+
         timestamp = time.time()
-        return {'type': PushStatus.TYPE, PushStatus.CREATED: timestamp, PushStatus.MODIFIED: timestamp, 'hostname': self.__kwargs.get('os_environ_hostname')}
+        self.__status = {'type': PushStatus.TYPE, PushStatus.CREATED: timestamp, PushStatus.MODIFIED: timestamp, 'hostname': self.__kwargs.get('os_environ_hostname')}
+        data.append(self.__status)
+        _logging.debug('Status [{}]'.format(self.__status))
+
+        try:
+            self.__config_files = list()
+            config_files = self.__kwargs.get('config_files', list())
+            assert isinstance(config_files, list)
+            for config_file in config_files:
+                try:
+                    _logging.debug('Config file [{}]'.format(config_file))
+                    assert isinstance(config_file, str)
+                    with open(file=config_file, mode='r') as file:
+                        config_file_data = yaml.load(file)
+                    _logging.debug('Data [{}]'.format(config_file_data))
+                    assert isinstance(config_file_data, list)
+                    for d in config_file_data:
+                        assert isinstance(d, dict)
+                        d[PushStatus.CONFIF_FILE] = config_file
+                    self.__config_files.extend(config_file_data)
+                except Exception as exception:
+                    _logging.warning('Failed to load config file [{}] exception [{}]'.format(config_file, exception))
+        except Exception as exception:
+            _logging.warning('Failed to load config files exception [{}]'.format(exception))
+
+        data.extend(self.__config_files)
+        _logging.debug('Data [{}]'.format(data))
+
+        return data
 
     def update(self) -> dict:
         _logging.debug('update()')
         self.__status[PushStatus.MODIFIED] = time.time()
-        return self.__status
-
-
-class PodStatus(koolie.zookeeper_api.using_kazoo.WithZooKeeper):
-
-    def __init__(self, **kwargs):
-        _logging.debug('PodStatus.__init()')
-        koolie.zookeeper_api.using_kazoo.WithZooKeeper.__init__(self, **kwargs)
-
-        self.__kwargs = kwargs
-
-        self.__data = list
-
-        self.pod_name = self.__kwargs.get('pod_name', str(uuid.uuid4()))
-
-        self.heartbeat = 10  # int(os.getenv(KOOLIE_POD_HEARTBEAT, KOOLIE_POD_HEARTBEAT_DEFAULT))
-
-        self.node_name = self.create_node_name(self.pod_name)
-
-        self.zoo_keeper.hosts = self.__kwargs.get('zookeeper_hosts')  # os.getenv(KOOLIE_ZOOKEEPER_HOSTS,KOOLIE_ZOOKEEPER_HOSTS_DEFAULT)
-
-        self.__created = time.time()
-        self.__status = dict()
-
-        _logging.debug(self)
-
-    @property
-    def _created(self):
-        return self.__created
-
-    @property
-    def pod_name(self):
-        return self.__pod_name
-
-    @pod_name.setter
-    def pod_name(self, pod_name: str):
-        assert pod_name is None or isinstance(pod_name, str)
-        self.__pod_name = pod_name
-
-    @property
-    def heartbeat(self) -> int:
-        return self.__heartbeat
-
-    @heartbeat.setter
-    def heartbeat(self, heartbeat: int):
-        assert heartbeat is not None and isinstance(heartbeat, int)
-        self.__heartbeat = heartbeat
-
-    @property
-    def node_name(self):
-        return self.__node_name
-
-    @node_name.setter
-    def node_name(self, node_name: str):
-        assert node_name is None or isinstance(node_name, str)
-        self.__node_name = node_name
-
-    # Protected stuff.
-
-    @property
-    def _status(self) -> dict:
-        return self.__status
-
-    @_status.setter
-    def _status(self, status: dict):
-        assert status is not None and isinstance(status, dict)
-        self.__status = status
-
-    def create_node_name(self, suffix: str) -> str:
-        assert suffix is not None and isinstance(suffix, str)
-        return '{}{}'.format(koolie.go.ZOOKEEPER_PODS, self.pod_name)
-
-    def start(self):
-        _logging.debug('start()')
-
-        if self.pod_name is None:
-            raise ValueError('Pod name not defined')
-
-        # self.__created = time.time()
-        # self.__status = self.create_status()
-        self.__data = self.create_data()
-        # if not self.__status[STATUS_VALID_KEY]:
-        #     _logging.warning('Status not valid [%s].', yaml.dump(self.__status))
-        #     return
-        try:
-            while True:
-                if self.zoo_keeper.open():
-                    self.zoo_keeper.create_ephemeral_node(self.node_name, self.encode_data())
-                    _logging.debug('Created ephemeral node [{}]'.format(self.node_name))
-                    while True:
-                        _logging.debug('Sleeping')
-                        time.sleep(self.heartbeat)
-                        if koolie.go.signalled_to_exit:
-                            _logging.info('Signal exit.')
-                            break
-                        self.__data = self.update_data()
-                        self.zoo_keeper.set_node_value(self.node_name, self.encode_data())
-                        _logging.debug('Updated node')
-                    break
-                else:
-                    _logging.warning('Failed to open ZooKeeper, waiting for ? seconds.')
-                    time.sleep(60)
-        except KeyboardInterrupt:
-            _logging.info('Ctrl+C exit.')
-        except Exception:
-            _logging.error('Unexpected [{}].'.format(sys.exc_info()[0]))
-            raise
-        finally:
-            self.zoo_keeper.close()
-
-    def stop(self):
-        _logging.info('stop()')
-        self._graceful_killer.kill_now = True
-
-    # Data.
-
-    def data(self) -> list:
+        _logging.debug('Data [{}]'.format(self.__data))
         return self.__data
-
-    def create_data(self) -> list:
-        _logging.debug('create_data()')
-        data = list()
-        self.__status = self.create_status()
-        data.append(self.__status)
-        return data
-
-    def update_data(self) -> list:
-        _logging.debug('update_data()')
-        data = list()
-        self.__status = self.update_status()
-        data.append(self.__status)
-        return data
-
-    def encode_data(self):
-        return yaml.dump(self.__data, default_flow_style=False, default_style='|').encode('utf-8')
-
-    # Status.
-
-    def encode_status(self):
-        return yaml.dump(self._status, default_flow_style=False, default_style='|').encode('utf-8')
-
-    def create_status(self) -> dict:
-        _logging.debug('create_status()')
-        status: dict = dict()
-        status[koolie.go.KOOLIE_STATUS_TYPE] = STATUS_TYPE
-        status[POD_KEY] = self.__pod_name
-        status[STATUS_CREATED_KEY] = self.__created
-        status[STATUS_MODIFIED_KEY] = time.time()
-        status[STATUS_HEARTBEAT_KEY] = self.__heartbeat
-        return status
-
-    def update_status(self) -> dict:
-        _logging.debug('update_status()')
-        status: dict = self.__status
-        status[STATUS_MODIFIED_KEY] = time.time()
-        return status
-
-    def __str__(self) -> str:
-        return 'Pod name [{}] Node name [{}] Heartbeat [{}] ZooKeeper [{}]'.format(self.pod_name, self.node_name, self.heartbeat, self.zoo_keeper)

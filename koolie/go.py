@@ -1,13 +1,11 @@
 import argparse
 import koolie.pod_api.pod_status
-import koolie.pod_api.push_nginx_config
 import koolie.nginx.zookeeper
 import koolie.version
 import koolie.zookeeper_api.using_kazoo
 import koolie.zookeeper_api.node_watch
 import logging
 import os
-import string
 import sys
 import time
 
@@ -52,7 +50,7 @@ def pod_status(**kwargs):
 
 def pod_push(**kwargs):
     _logger.debug('pod_push-config({})'.format(kwargs))
-    koolie.pod_api.push_nginx_config.PushNGINXConfig(**kwargs).start()
+    koolie.pod_api.pod_status.PushConfig(**kwargs).start()
 
 
 def zookeeper_test(args):
@@ -105,15 +103,11 @@ pod_parser.set_defaults(func=suffix_help, help_prefix='pod')
 
 pod_subparsers = pod_parser.add_subparsers()
 
-# pod push
-
-pod_push_parser = pod_subparsers.add_parser('push', help='Push')
-pod_push_parser.set_defaults(func=pod_push)
-
 # pod status
 
 pod_status_parser = pod_subparsers.add_parser('status', help='Status')
 pod_status_parser.add_argument('--zookeeper-hosts', type=str, default=default('ZOOKEEPER_HOSTS', ZOOKEEPER_HOSTS))
+pod_status_parser.add_argument('--config-files', type=str, nargs='*')
 pod_status_parser.set_defaults(func=pod_status)
 
 # nginx
