@@ -2,8 +2,8 @@
   name: "status"
   tag: "${os_environ_hostname}"
   server: "default"
+  loadPolicy: "unique"
+  matchModifier: ""
+  locationMatch: "/status/"
   config: |
-    location /status/ {
-      return 200 "ok";
-    }
-
+    return 200 "ok";

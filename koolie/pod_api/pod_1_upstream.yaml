@@ -1,0 +1,7 @@
+- type: "nginx/upstream"
+  name: "ydos"
+  tag: "${os_environ_hostname}"
+  server: "default"
+  loadPolicy: "append"
+  config: |
+    server ${os_environ_hostname}/p1;

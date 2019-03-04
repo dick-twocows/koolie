@@ -1,9 +1,7 @@
 import logging
-import sys
-import time
 import yaml
 import kazoo.protocol.states
-import koolie.go
+import koolie.tools.service
 
 import koolie.zookeeper_api.using_kazoo
 
@@ -11,41 +9,43 @@ import koolie.zookeeper_api.using_kazoo
 _logging = logging.getLogger(__name__)
 
 
-class NodeWatch(koolie.zookeeper_api.using_kazoo.WithZooKeeper):
+class NodeWatch(koolie.tools.service.SleepService):
 
     def __init__(self, **kwargs):
-        koolie.zookeeper_api.using_kazoo.WithZooKeeper.__init__(self, **kwargs)
+        super().__init__(**kwargs)
 
         self.__kwargs = kwargs
 
-    @property
-    def args(self):
-        return self.__kwargs
+        self.__zoo_keeper = koolie.zookeeper_api.using_kazoo.ZooKeeper(**kwargs)
+
+    def zoo_keeper(self):
+        return self.__zoo_keeper
+
+    def zookeeper_node_path(self) -> str:
+        return self.__kwargs.get('zookeeper_node_path')
 
     def start(self):
-        _logging.debug('NodeWatch.start()')
-        if self.zoo_keeper.open():
-            try:
-                @self.zoo_keeper.kazoo_client.ChildrenWatch(self.__kwargs.get('zookeeper_node_path'))
-                def watch_children(children):
-                    self.change(children)
-                    return True
+        _logging.debug('start()')
+        self.__zoo_keeper.open()
+        try:
+            @self.__zoo_keeper.kazoo_client.ChildrenWatch(self.zookeeper_node_path())
+            def watch_children(children):
+                self.change(children)
+                return True
 
-                while True:
-                    time.sleep(1)
-                    if koolie.go.signalled_to_exit:
-                        _logging.debug('Signalled to exit.')
-                        break
-            except KeyboardInterrupt:
-                _logging.info('Ctrl+C exit.')
-            except Exception as exception:
-                _logging.error('Unexpected [{}]\nException [{}]'.format(sys.exc_info()[0], exception))
-            finally:
-                self.zoo_keeper.close()
+            super().start()
+        except Exception as exception:
+            _logging.warning('Exception [{}]'.format(exception))
+        finally:
+            self.__zoo_keeper.close()
 
     def stop(self):
-        _logging.debug('NodeWatch.stop()')
-        # self.__graceful_killer.kill_now = True
+        _logging.debug('stop()')
+        super().stop()
+
+    def go(self):
+        _logging.debug('go()')
+        super().go()
 
     # Override in subclasses to do something with the children.
     def change(self, children):
@@ -66,13 +66,12 @@ class DeltaNodeWatch(NodeWatch):
         self.__current = new
         return True
 
-    def after_change(self):
-        pass
-
     def added(self, children) -> object:
+        _logging.debug('added()')
         pass
 
     def removed(self, children) -> object:
+        _logging.debug('removed()')
         pass
 
 

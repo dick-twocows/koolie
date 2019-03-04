@@ -26,10 +26,13 @@ class Service(abc.ABC):
         self.__kwargs = kwargs
         self.__exit = None
 
+    def signalled_to_exit(self):
+        return self.__exit or signalled_to_exit
+
     @abc.abstractmethod
     def start(self):
         self.__exit = False
-        while not self.__exit and not signalled_to_exit:
+        while not self.signalled_to_exit():
             self.go()
 
     @abc.abstractmethod
@@ -49,8 +52,12 @@ class SleepService(Service):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self.__kwargs = kwargs
+        self.__latency = 1
         self.__interval = self.__kwargs.get(SleepService.INTERVAL, SleepService.INTERVAL_DEFAULT)
-        _logger.info('Interval [{}]'.format(self.__interval))
+        _logger.info('Latency [{}] Interval [{}]'.format(self.__latency, self.__interval))
+
+    def sleep_interval(self) -> int:
+        return self.__kwargs.get(SleepService.INTERVAL, SleepService.INTERVAL_DEFAULT)
 
     def start(self):
         super().start()
@@ -60,7 +67,10 @@ class SleepService(Service):
 
     def go(self):
         _logger.debug('go()')
-        time.sleep(self.__interval)
+        count = 0
+        while count <= self.__interval and not self.signalled_to_exit():
+            time.sleep(self.__latency)
+            count = count + 1
 
 
 if __name__ == '__main__':

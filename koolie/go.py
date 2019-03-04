@@ -39,8 +39,8 @@ def sleep(args):
         time.sleep(10)
 
 
-def nginx_consume_zookeeper(args):
-    koolie.nginx.zookeeper.Consume().args(args).start()
+def nginx_consume_zookeeper(**kwargs):
+    koolie.nginx.zookeeper.Consume(**kwargs).start()
 
 
 def pod_status(**kwargs):
@@ -133,6 +133,7 @@ nginx_consume_subparsers = nginx_consume_parser.add_subparsers()
 nginx_consume_zookeeper_parser = nginx_consume_subparsers.add_parser('zookeeper', help='ZooKeeper')
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-hosts', type=str, default=default('ZOOKEEPER_HOSTS', ZOOKEEPER_HOSTS))
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-kubernetes-pods', type=str, default=default('ZOOKEEPER_KUBERNETES_PODS', ZOOKEEPER_PODS))
+nginx_consume_zookeeper_parser.add_argument('--config-load-file', type=str, nargs='*')
 nginx_consume_zookeeper_parser.set_defaults(func=nginx_consume_zookeeper)
 
 # ZooKeeper

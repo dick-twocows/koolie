@@ -1,16 +1,22 @@
 import logging
-import signal
+import string
 
 _logger = logging.getLogger(__name__)
 
 
-flag_to_exit = False
+def get_from_kwargs(k: str, v: str, **kwargs):
+    r = None
+    if k in kwargs.keys():
+        _logger.debug('Returning [{}]'.format(k))
+        r = kwargs.get(k)
+    else:
+        _logger.debug('Defaulting [{}] tp [{}]'.format(k, v))
+        r = v
+    return r
 
 
-def set_flag_to_exit(signum, frame):
-    comm = True
-
-signal.signal()
-
-signal.signal(signal.SIGINT, set_flag_to_exit)
-signal.signal(signal.SIGTERM, set_flag_to_exit)
+def substitute(source, **kwargs):
+    template = string.Template(source)
+    result = template.substitute(kwargs)
+    _logger.debug('Source [{}]\nResult [{}]'.format(source, result))
+    return result

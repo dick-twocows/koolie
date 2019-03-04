@@ -1,11 +1,11 @@
 import datetime
-import koolie.core
 import logging
 import os
 import subprocess
 import shutil
-import sys
 import time
+import koolie.tools.common
+import uuid
 import yaml
 
 _logging = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ NGINX_KEY = 'nginx'
 CONFIG_KEY = 'config'
 
 NGINX_FOLDER_ENV = 'NGINX_FOLDER'
-NGINX_FOLDER_DEFAULT = '/etc/nginx/'
+NGINX_FOLDER_DEFAULT = '/tmp/nginx/'
 nginx_folder = os.getenv(NGINX_FOLDER_ENV, NGINX_FOLDER_DEFAULT)
 _logging.info('NGINX folder [{}]'.format(nginx_folder))
 
@@ -65,27 +65,22 @@ LOCATION_MATCH_MODIFIER = 'matchModifier'
 LOCATION_LOCATION_MATCH = 'locationMatch'
 
 
-# class WithData(object):
-#
-#     def __init__(self):
-#         self.data = None
-#
-#     @property
-#     def data(self) -> dict:
-#         return self.__data
-#
-#     @data.setter
-#     def data(self, data: dict):
-#         assert data is None or isinstance(data, dict)
-#         self.__data = data
-
-
 class NGINXConfig(object):
 
-    def __init__(self) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__()
-        self.__data = None
+
+        self.__kwargs = kwargs
+
+        self.__nginx_folder = self.get_from_kwargs('nginx_folder', NGINX_FOLDER_DEFAULT)
+        self.__nginx_servers = self.get_from_kwargs('nginx_servers_folder', '{}servers'.format(self.__nginx_folder))
+        self.__nginx_upstreams = self.get_from_kwargs('nginx_upstreams_folder', '{}upstreams'.format(self.__nginx_folder))
+        _logging.info('NGINX folders\nNGINX [{}]\nServers [{}]\nUpstreams [{}]'.format(self.__nginx_folder, self.__nginx_servers, self.__nginx_upstreams))
+
+        self.__data = dict()
         self.reset()
+
+        self.__load_metadata = dict()
 
         self.__load_from_list = dict()
         self.__load_from_list[MAIN_TYPE] = self.load_main
@@ -95,8 +90,13 @@ class NGINXConfig(object):
         self.__load_from_list[LOCATION_TYPE] = self.load_location
         self.__load_from_list[UPSTREAM_TYPE] = self.load_upstream
 
+        self.__dump_metadata = dict()
+
     def __str__(self) -> str:
         return str(self.__data)
+
+    def get_from_kwargs(self, k, v):
+        return koolie.tools.common.get_from_kwargs(k, v, **self.__kwargs)
 
     @property
     def data(self) -> dict:
@@ -108,7 +108,7 @@ class NGINXConfig(object):
         self.__data = data
 
     def common_nginx_conf_comments(self):
-        return '# Created by Koolie [{}]\n\n'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+        return '# Created by Koolie\n# [{}]\n# Load ID [{}]\n\n'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), self.__load_id)
 
     def create_servers_folder(self):
         if not os.path.exists(servers_folder):
@@ -162,7 +162,7 @@ class NGINXConfig(object):
 
     def get_upstream_id(self, source) -> str:
         assert source is not None and isinstance(source, dict)
-        return '({}){}'.format(source.get(TAG_KEY, ''), source.get(NAME_KEY))
+        return '({}){}/{}'.format(self.get_tag(source), source.get(SERVER_KEY), source.get(NAME_KEY))
 
     def get_upstream(self, name) -> dict:
         assert name is not None and isinstance(name, str)
@@ -179,8 +179,19 @@ class NGINXConfig(object):
 
     # Reset.
 
+    def clear(self):
+        self.__data.clear()
+        self.data[SERVERS_KEY] = list()
+        self.data[LOCATIONS_KEY] = list()
+        self.data[UPSTREAMS_KEY] = list()
+
     def reset(self):
         self.__data = dict()
+
+        MAIN_TYPE = '{}/main'.format(NGINX_KEY)
+        EVENTS_TYPE = '{}/events'.format(NGINX_KEY)
+        HTTP_TYPE = '{}/http'.format(NGINX_KEY)
+
         self.data[SERVERS_KEY] = list()
         self.data[LOCATIONS_KEY] = list()
         self.data[UPSTREAMS_KEY] = list()
@@ -209,15 +220,38 @@ class NGINXConfig(object):
 
     # Load.
 
+    def load_start(self):
+        _logging.debug('load_start()')
+        try:
+            self.__load_metadata.clear()
+            self.__load_metadata['id'] = str(uuid.uuid4())
+            self.__load_metadata['started'] = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+            _logging.info('Load start [{}]'.format(self.__load_metadata))
+
+            config_files = self.get_from_kwargs('config_load_file', list())
+            _logging.info('{}'.format(config_files))
+            assert isinstance(config_files, list)
+            self.load_from_file(config_files)
+        except Exception as exception:
+            _logging.warning('Failed to load [{}]'.format(exception))
+
+    def load_stop(self):
+        _logging.debug('load_stop()')
+        try:
+            self.__load_metadata['stopped'] = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+            _logging.info('Load stop [{}]'.format(self.__load_metadata))
+        except Exception as exception:
+            _logging.warning('Failed to load [{}]'.format(exception))
+
     def load(self, source):
         _logging.debug('load()')
         try:
             if isinstance(source, bytes):
-                self.load_from_bytes(source)
+                return self.load_from_bytes(source)
             elif isinstance(source, list):
-                self.load_from_list(source)
+                return self.load_from_list(source)
             elif isinstance(source, str):
-                self.load_from_file(source)
+                return self.load_from_file(source)
             else:
                 assert TypeError('Unknown source type [{}]'.format(type(source)))
         except Exception as exception:
@@ -258,7 +292,10 @@ class NGINXConfig(object):
                 server[CONFIG_KEY] = '{}\n# Appended [{}]\n{}'.format(server[CONFIG_KEY], self.get_tag(source), source[CONFIG_KEY])
                 _logging.info('Appended server [{}]'.format(source[NAME_KEY]))
         else:
-            _logging.warning('Failed to load location [{}] [{}], unknown load policy [{}]'.format(source[SERVER_KEY], source[NAME_KEY], source[LOAD_POLICY]))
+            _logging.warning('Failed to load server [{}] [{}], unknown load policy [{}]'.format(source[SERVER_KEY], source[NAME_KEY], source[LOAD_POLICY]))
+
+    def load_comment_source(self, prefix, source, data):
+        return '{}\n# koolie -> [{}]\n{}\n# koolie <- [{}]\n'.format(prefix, source, data, source)
 
     def load_location(self, source: dict):
         try:
@@ -269,32 +306,35 @@ class NGINXConfig(object):
                 location = self.get_location(source[SERVER_KEY], source[NAME_KEY])
                 if location is None:
                     self.locations().append(source)
-                    source[CONFIG_KEY] = '# From [{}]\n{}'.format(self.get_location_id(source), source[CONFIG_KEY])
+                    source[CONFIG_KEY] = self.load_comment_source('', self.get_location_id(source), source[CONFIG_KEY])
                     _logging.info('Created location [{}]'.format(self.get_location_id(source)))
                 else:
-                    _logging.warning('Failed to load Location [{}] already exists as [{}].'.format(self.get_location_id(source), self.get_location_id(location)))
+                    _logging.warning('Failed to load unique location\n[{}]\nExisting location \n[{}]'.format(source, location))
             elif source[LOAD_POLICY] == LOAD_POLICY_APPEND:
                 location = self.get_location(source[SERVER_KEY], source[NAME_KEY])
                 if location is None:
                     self.locations().append(source)
                     source[CONFIG_KEY] = '# From [{}]\n{}'.format(self.get_location_id(source), source[CONFIG_KEY])
                 else:
-                    location[CONFIG_KEY] = '{}\n# From [{}]\n{}'.format(location[CONFIG_KEY], self.get_location_id(source), source[CONFIG_KEY])
+                    location[CONFIG_KEY] = '{}\n# -> [{}]\n{}\n# <- [{}]'.format(location[CONFIG_KEY], self.get_location_id(source), source[CONFIG_KEY], self.get_location_id(source))
                     _logging.debug('Appended location [{}]'.format(self.get_location_id(source)))
             else:
                 _logging.warning('Failed to load location [{}], unknown load policy [{}]'.format(self.get_location_id(source), source[LOAD_POLICY]))
         except Exception as exception:
-            _logging.warning('Failed to load location.\n{}\n{}'.format(source, exception))
+            _logging.warning('Failed to load location.\nConfig [{}]\nException [{}]'.format(source, exception))
 
     def load_upstream(self, source: dict):
         try:
             _logging.debug('load_upstream()')
+
             assert isinstance(source, dict)
             _logging.debug('loadPolicy [{}]'.format(source[LOAD_POLICY]))
+
             if source[LOAD_POLICY] == LOAD_POLICY_UNIQUE:
                 upstream = self.get_upstream(source[NAME_KEY])
                 if upstream is None:
                     self.upstreams().append(source)
+                    source[CONFIG_KEY] = self.load_comment_source('', self.get_upstream_id(source), source[CONFIG_KEY])
                     _logging.info('Created upstream [{}]'.format(self.get_upstream_id(source)))
                 else:
                     _logging.warning('Failed to load upstream [{}] already exists as [{}].'.format(self.get_upstream_id(source), self.get_upstream_id(upstream)))
@@ -302,12 +342,13 @@ class NGINXConfig(object):
                 upstream = self.get_upstream(source[NAME_KEY])
                 if upstream is None:
                     self.upstreams().append(source)
-                    source[CONFIG_KEY] = '# From [{}]\n{}'.format(self.get_upstream_id(source), source[CONFIG_KEY])
+                    source[CONFIG_KEY] = self.load_comment_source('', self.get_upstream_id(source), source[CONFIG_KEY])
                     _logging.info('Created upstream [{}]'.format(self.get_upstream_id(source)))
                 else:
-                    upstream[CONFIG_KEY] = '{}\n# From [{}]\n{}'.format(upstream[CONFIG_KEY], self.get_upstream_id(source), source[CONFIG_KEY])
+                    upstream[CONFIG_KEY] = self.load_comment_source(upstream[CONFIG_KEY], self.get_upstream_id(source), source[CONFIG_KEY])
             else:
                 _logging.warning('Failed to load upstream [{}], unknown load policy [{}]'.format(self.get_upstream_id(source), source[LOAD_POLICY]))
+
         except Exception as exception:
             _logging.warning('Failed to load upstream.\nSource {}\nException {}'.format(source, exception))
 
@@ -327,6 +368,8 @@ class NGINXConfig(object):
 
     def load_from_list(self, source: list):
         _logging.debug('load_from_list()\nsource: [{}]'.format(source))
+
+        loaded = 0
         try:
             if source is None:
                 _logging.info('Nothing to load')
@@ -344,36 +387,56 @@ class NGINXConfig(object):
                         _logging.warning('load_from_list() Unknown item [({}){}]'.format(self.get_tag(item), item[TYPE_KEY]))
                     else:
                         loader(item)
+                        loaded = loaded + 1
                         _logging.debug('Returned from loader.')
                 else:
                     _logging.warning('Failed to load item due to type [{}]'.format(type(item)))
 
         except Exception as exception:
+            if loaded > 0:
+                loaded = -1
             _logging.warning('Failed to load from list [{}:{}]'.format(type(exception), exception))
 
-    def load_from_file(self, source: str):
+        _logging.debug('Loaded [{}]'.format(loaded))
+        return loaded
+
+    def load_from_file(self, source):
         _logging.debug('load_from_file()')
         try:
             if source is None:
                 _logging.info('Nothing to load.')
                 return
 
-            assert isinstance(source, str)
-            _logging.info('Loading from file [{}]'.format(source))
+            assert isinstance(source, str) or isinstance(source, list)
 
-            with open(file=source, mode='r') as file:
-                data = yaml.load(file)
-
-            self.load(data)
-
+            if isinstance(source, str):
+                with open(file=source, mode='r') as file:
+                    data = file.read()
+                self.load(yaml.load(koolie.tools.common.substitute(data, **self.__kwargs)))
+            elif isinstance(source, list):
+                for file in source:
+                    self.load_from_file(file)
+            else:
+                _logging.warning('Unable to load source as a file, type [{}]'.format(type(source)))
         except Exception as exception:
             _logging.warning('Failed to load from file [{}]'.format(exception))
 
     # Dump.
 
+    def dump_start(self):
+        self.__dump_metadata.clear()
+        self.__dump_metadata['id'] = str(uuid.uuid4())
+        self.__dump_metadata['started'] = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+        _logging.info('Dump start [{}]'.format(self.__dump_metadata))
+
+    def dump_stop(self):
+        self.__dump_metadata['stopped'] = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+        _logging.info('Dump stopped [{}]'.format(self.__dump_metadata))
+
     def dump(self):
         _logging.debug('dump()')
         try:
+
             if os.path.exists('{}nginx.conf'.format(nginx_folder)):
                 os.remove('{}nginx.conf'.format(nginx_folder))
 
@@ -381,7 +444,7 @@ class NGINXConfig(object):
 
             self.reset_servers_folder()
 
-            self.dump_nginx()
+            # self.dump_nginx()
 
             self.dump_upstreams()
 
@@ -393,10 +456,13 @@ class NGINXConfig(object):
         except Exception as exception:
             _logging.warning('update() Failed to update [{}] [{}]'.format(type(exception), exception))
 
+    def dump_file_comment(self):
+        return '# Created by Koolie\n# Load [{}]\n# Dump [{}]\n\n'.format(self.__load_metadata, self.__dump_metadata)
+
     def dump_nginx(self):
         file_name = '{}nginx.conf'.format(nginx_folder)
         with open(file=file_name, mode='w') as file:
-            file.write(self.common_nginx_conf_comments())
+            file.write(self.dump_file_comment())
             file.write(self.data[MAIN_TYPE][CONFIG_KEY])
             file.write(self.data[EVENTS_TYPE][CONFIG_KEY])
             file.write(self.data[HTTP_TYPE][CONFIG_KEY])
@@ -406,7 +472,7 @@ class NGINXConfig(object):
 
         file_name = '{}{}.conf'.format(upstreams_folder, upstream[NAME_KEY])
         with open(file=file_name, mode='w') as file:
-            file.write(self.common_nginx_conf_comments())
+            file.write(self.dump_file_comment())
             file.write('upstream {} {{\n'.format(upstream[NAME_KEY]))
             file.write(upstream[CONFIG_KEY])
             file.write('}\n')
@@ -445,7 +511,7 @@ class NGINXConfig(object):
 
         file_name = '{}{}.conf'.format(server_folder, location[NAME_KEY])
         with open(file=file_name, mode='w') as file:
-            file.write(self.common_nginx_conf_comments())
+            file.write(self.dump_file_comment())
             file.write('location {} {} {{\n'.format(location[LOCATION_MATCH_MODIFIER], location[LOCATION_LOCATION_MATCH]))
             file.write(location[CONFIG_KEY])
             file.write('}\n')
@@ -467,18 +533,3 @@ class NGINXConfig(object):
 #     os.execute("/bin/myShellScript.sh")
 #   }
 # }
-
-
-def test():
-    nginx = NGINXConfig()
-    nginx.load('nginx_test.yaml')
-    nginx.dump()
-    print('OK')
-
-
-if __name__ == '__main__':
-    level: str = getattr(logging, os.getenv(koolie.core.KOOLIE_LOGGING_LEVEL_ENV, koolie.core.KOOLIE_LOGGING_LEVEL_DEFAULT).upper())
-    print('Level [{}]'.format(level))
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
-    print('Logging [{}]'.format(_logging))
-    test()

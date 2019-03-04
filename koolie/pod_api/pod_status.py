@@ -1,7 +1,7 @@
 import koolie
 import logging
 import os
-import sys
+import string
 import time
 import uuid
 import yaml
@@ -23,6 +23,10 @@ STATUS_HEARTBEAT_KEY: str = 'heartbeat'  # How often the status is updated in se
 
 def encode_data(data) -> str:
     return yaml.dump(data, default_flow_style=False, default_style='|').encode('utf-8')
+
+
+def decode_data(data) -> object:
+    return yaml.load(data.decode('utf-8'))
 
 
 class PushStatus(koolie.tools.service.SleepService):
@@ -90,15 +94,20 @@ class PushStatus(koolie.tools.service.SleepService):
             for config_file in config_files:
                 try:
                     _logging.debug('Config file [{}]'.format(config_file))
+
                     assert isinstance(config_file, str)
                     with open(file=config_file, mode='r') as file:
-                        config_file_data = yaml.load(file)
-                    _logging.debug('Data [{}]'.format(config_file_data))
-                    assert isinstance(config_file_data, list)
-                    for d in config_file_data:
+                        config_file_data = file.read()
+
+                    config_file_yaml = yaml.load(self.substitute(config_file_data))
+                    _logging.debug('YAML [{}]'.format(config_file_yaml))
+
+                    assert isinstance(config_file_yaml, list)
+                    for d in config_file_yaml:
                         assert isinstance(d, dict)
                         d[PushStatus.CONFIF_FILE] = config_file
-                    self.__config_files.extend(config_file_data)
+
+                    self.__config_files.extend(config_file_yaml)
                 except Exception as exception:
                     _logging.warning('Failed to load config file [{}] exception [{}]'.format(config_file, exception))
         except Exception as exception:
@@ -114,3 +123,11 @@ class PushStatus(koolie.tools.service.SleepService):
         self.__status[PushStatus.MODIFIED] = time.time()
         _logging.debug('Data [{}]'.format(self.__data))
         return self.__data
+
+    def substitute(self, data):
+        _logging.debug('substitute()')
+        template = string.Template(data)
+        _logging.debug('Template [{}]'.format(template))
+        result = template.substitute(self.__kwargs)
+        _logging.debug('result [{}]'.format(result))
+        return result
