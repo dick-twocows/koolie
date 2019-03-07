@@ -135,6 +135,7 @@ nginx_consume_zookeeper_parser.add_argument('--zookeeper-hosts', type=str, defau
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-kubernetes-pods', type=str, default=default('ZOOKEEPER_KUBERNETES_PODS', ZOOKEEPER_PODS))
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-node-path', type=str, default=default('ZOOKEEPER_NODE_PATH', ZOOKEEPER_ROOT_NODE))
 nginx_consume_zookeeper_parser.add_argument('--config-load-file', type=str, nargs='*')
+nginx_consume_zookeeper_parser.add_argument('--nginx-servers-folder', type=str, help='NGINX servers folder')
 nginx_consume_zookeeper_parser.set_defaults(func=nginx_consume_zookeeper)
 
 # ZooKeeper
