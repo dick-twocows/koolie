@@ -59,8 +59,12 @@ class DeltaNodeWatch(NodeWatch):
 
         self.__current = set()
 
+    def current(self) -> set:
+        return self.__current
+
     def change(self, children):
         new: set = set(children)  # Sanity check!
+        assert len(children) == len(new)
         self.removed(self.__current.difference(new))
         self.added(new.difference(self.__current))
         self.__current = new
@@ -68,11 +72,9 @@ class DeltaNodeWatch(NodeWatch):
 
     def added(self, children) -> object:
         _logging.debug('added()')
-        pass
 
     def removed(self, children) -> object:
         _logging.debug('removed()')
-        pass
 
 
 class EchoNodeWatch(DeltaNodeWatch):

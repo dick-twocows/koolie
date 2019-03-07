@@ -80,6 +80,8 @@ class NGINXConfig(object):
         self.__data = dict()
         self.reset()
 
+        self.__loaded_count = 0
+
         self.__load_metadata = dict()
 
         self.__load_from_list = dict()
@@ -106,6 +108,12 @@ class NGINXConfig(object):
     def data(self, data: dict):
         assert data is not None and isinstance(data, dict)
         self.__data = data
+
+    def loaded_count(self) -> int:
+        return self.__loaded_count
+
+    def load_metadata(self):
+        return self.__load_metadata
 
     def common_nginx_conf_comments(self):
         return '# Created by Koolie\n# [{}]\n# Load ID [{}]\n\n'.format(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), self.__load_id)
@@ -223,15 +231,13 @@ class NGINXConfig(object):
     def load_start(self):
         _logging.debug('load_start()')
         try:
-            self.__load_metadata.clear()
+            self.__load_metadata = dict()
             self.__load_metadata['id'] = str(uuid.uuid4())
             self.__load_metadata['started'] = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+            self.__load_metadata['load_count'] = 0
             _logging.info('Load start [{}]'.format(self.__load_metadata))
 
-            config_files = self.get_from_kwargs('config_load_file', list())
-            _logging.info('{}'.format(config_files))
-            assert isinstance(config_files, list)
-            self.load_from_file(config_files)
+            self.load_from_file(self.get_from_kwargs('config_load_file', list()))
         except Exception as exception:
             _logging.warning('Failed to load [{}]'.format(exception))
 
@@ -369,7 +375,6 @@ class NGINXConfig(object):
     def load_from_list(self, source: list):
         _logging.debug('load_from_list()\nsource: [{}]'.format(source))
 
-        loaded = 0
         try:
             if source is None:
                 _logging.info('Nothing to load')
@@ -387,37 +392,33 @@ class NGINXConfig(object):
                         _logging.warning('load_from_list() Unknown item [({}){}]'.format(self.get_tag(item), item[TYPE_KEY]))
                     else:
                         loader(item)
-                        loaded = loaded + 1
+                        self.__load_metadata['load_count'] = self.__load_metadata['load_count'] + 1
                         _logging.debug('Returned from loader.')
                 else:
                     _logging.warning('Failed to load item due to type [{}]'.format(type(item)))
 
         except Exception as exception:
-            if loaded > 0:
-                loaded = -1
             _logging.warning('Failed to load from list [{}:{}]'.format(type(exception), exception))
 
-        _logging.debug('Loaded [{}]'.format(loaded))
-        return loaded
-
     def load_from_file(self, source):
-        _logging.debug('load_from_file()')
+        _logging.debug('load_from_file(source=type:{})'.format(type(source)))
         try:
             if source is None:
                 _logging.info('Nothing to load.')
                 return
 
-            assert isinstance(source, str) or isinstance(source, list)
-
             if isinstance(source, str):
-                with open(file=source, mode='r') as file:
-                    data = file.read()
-                self.load(yaml.load(koolie.tools.common.substitute(data, **self.__kwargs)))
+                try:
+                    with open(file=source, mode='r') as file:
+                        data = file.read()
+                    self.load(yaml.load(koolie.tools.common.substitute(data, **self.__kwargs)))
+                except Exception as exception:
+                    _logging.warning('Failed to load file [{}] with exception [{}]'.format(source, exception))
             elif isinstance(source, list):
                 for file in source:
                     self.load_from_file(file)
             else:
-                _logging.warning('Unable to load source as a file, type [{}]'.format(type(source)))
+                _logging.warning('Unable to load source as a file, unknown type [{}]'.format(type(source)))
         except Exception as exception:
             _logging.warning('Failed to load from file [{}]'.format(exception))
 
@@ -520,7 +521,8 @@ class NGINXConfig(object):
         result: bool = False
         try:
             _logging.debug('Testing NGINX configuration')
-            completed_process: subprocess.CompletedProcess = subprocess.run(['nginx', '-t'])
+            # Load the run prefix in via the args.
+            completed_process: subprocess.CompletedProcess = subprocess.run(['docker', 'exec', '-i', 'nginx', 'nginx', '-t'])
             _logging.debug('Completed process returned [{}]'.format(completed_process))
             result = completed_process.returncode == 0
         except Exception as called_process_error:

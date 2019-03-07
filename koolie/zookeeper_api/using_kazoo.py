@@ -57,8 +57,12 @@ class ZooKeeper(object):
         self.create_node(path, value, ephemeral=True, make_path=True)
 
     def get_node_value(self, path) -> tuple:
-        _logging.debug('get_node_value(path [%s])', path)
-        return self.__kazoo_client.get(path)
+        _logging.debug('get_node_value(path=[%s])', path)
+        try:
+            return self.__kazoo_client.get(path)
+        except Exception as exception:
+            _logging.warning('Failed to get value for path [{}] with exception [{}]'.format(path, exception))
+            return None
 
     def set_node_value(self, path: str, value=b''):
         _logging.debug('ZooKeeper.set_node_value()')

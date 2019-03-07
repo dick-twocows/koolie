@@ -9,8 +9,8 @@ import os
 import sys
 import time
 
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 _logger = logging.getLogger(__name__)
-
 
 # Koolie variables.
 
@@ -133,6 +133,7 @@ nginx_consume_subparsers = nginx_consume_parser.add_subparsers()
 nginx_consume_zookeeper_parser = nginx_consume_subparsers.add_parser('zookeeper', help='ZooKeeper')
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-hosts', type=str, default=default('ZOOKEEPER_HOSTS', ZOOKEEPER_HOSTS))
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-kubernetes-pods', type=str, default=default('ZOOKEEPER_KUBERNETES_PODS', ZOOKEEPER_PODS))
+nginx_consume_zookeeper_parser.add_argument('--zookeeper-node-path', type=str, default=default('ZOOKEEPER_NODE_PATH', ZOOKEEPER_ROOT_NODE))
 nginx_consume_zookeeper_parser.add_argument('--config-load-file', type=str, nargs='*')
 nginx_consume_zookeeper_parser.set_defaults(func=nginx_consume_zookeeper)
 
@@ -153,34 +154,42 @@ zookeeper_watch_parser.set_defaults(func=zookeeper_watch)
 
 
 if __name__ == '__main__':
-    # args = parser.parse_args(args='nginx watch zookeeper --zookeeper-hosts=foo'.split())
-    args, unknowns = parser.parse_known_args()
 
-    kwargs = dict(vars(args))
-
-    # Take the unknowns and for any --k=v entries add to the kwargs.
-    # This isn't fool proof but it is defined.
-    values = list()
-    for arg in unknowns:
-        if arg.startswith('--'):
-            if arg.index('=') > 0:
-                # Strip the leading '--' and replace '-' with '_' as per argparse.
-                # eg --some-key=value would result in kwargs['some_key'] = value
-                kwargs[arg[2:arg.index('=')].strip().replace('-', '_')] = arg[arg.index('=') + 1:].strip()
-            else:
-                # Replace the '-' with '_' and set the value to True as per argparse.
-                kwargs[arg[2:].replace('-', '_')] = True
-        else:
-            # _logger.warning('Skipping [{}]'.format(arg))
-            values.append(arg)
-    # Add a values key.
-    kwargs['values'] = values
-
+    _logger.info('Loading environment variables')
+    kwargs = dict()
     # Add in all the environment variables.
     for k, v in os.environ.items():
         kwargs['os_environ_{}'.format(k.replace('-', '_').lower())] = v
 
-    logging.basicConfig(stream=sys.stdout, level=kwargs['logging_level'])
+    _logger.info('Parsing CLI arguments')
+    args = parser.parse_args()
+    cli_args = dict(vars(args))
+
+    _logger.info('Merging CLI arguments')
+    for k in cli_args.keys():
+        if k in kwargs.keys():
+            _logger.warning('Overriding [{}] [{}] from CLI [{}]'.format(k, kwargs.get(k), cli_args.get(k)))
+        kwargs[k] = cli_args[k]
+
+    logging.basicConfig(level=kwargs['logging_level'])
+
+    # # Take the unknowns and for any --k=v entries add to the kwargs.
+    # # This isn't fool proof but it is defined.
+    # values = list()
+    # for arg in unknowns:
+    #     if arg.startswith('--'):
+    #         if arg.index('=') > 0:
+    #             # Strip the leading '--' and replace '-' with '_' as per argparse.
+    #             # eg --some-key=value would result in kwargs['some_key'] = value
+    #             kwargs[arg[2:arg.index('=')].strip().replace('-', '_')] = arg[arg.index('=') + 1:].strip()
+    #         else:
+    #             # Replace the '-' with '_' and set the value to True as per argparse.
+    #             kwargs[arg[2:].replace('-', '_')] = True
+    #     else:
+    #         # _logger.warning('Skipping [{}]'.format(arg))
+    #         values.append(arg)
+    # # Add a values key.
+    # kwargs['values'] = values
 
     # Dump the kwargs for sanity.
     for k in sorted(kwargs.keys()):

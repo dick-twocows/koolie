@@ -22,11 +22,19 @@ STATUS_HEARTBEAT_KEY: str = 'heartbeat'  # How often the status is updated in se
 
 
 def encode_data(data) -> str:
-    return yaml.dump(data, default_flow_style=False, default_style='|').encode('utf-8')
+    try:
+        return yaml.dump(data, default_flow_style=False, default_style='|').encode('utf-8')
+    except Exception as exception:
+        _logging.warning('Failed to encode data with exception, type [{}] value [{}]'.format(exception, type(data), data))
+        return None
 
 
 def decode_data(data) -> object:
-    return yaml.load(data.decode('utf-8'))
+    try:
+        return yaml.load(data.decode('utf-8'))
+    except Exception as exception:
+        _logging.warning('Failed to decode data with exception, type [{}] value [{}]'.format(exception, type(data), data))
+        return None
 
 
 class PushStatus(koolie.tools.service.SleepService):
