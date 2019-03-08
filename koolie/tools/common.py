@@ -1,4 +1,5 @@
 import logging
+import os
 import string
 
 _logger = logging.getLogger(__name__)
@@ -24,3 +25,23 @@ def substitute(source, **kwargs):
     result = template.substitute(kwargs)
     _logger.debug('Source [{}]\nResult [{}]'.format(source, result))
     return result
+
+
+def safe_substitute(source, **kwargs):
+    template = string.Template(source)
+    result = template.safe_substitute(kwargs)
+    _logger.debug('Source [{}]\nResult [{}]'.format(source, result))
+    return result
+
+
+def clear_directory(path: str):
+    _logger.debug('clear_directory(path=[{}])'.format(path))
+    for folderName, sub_folders, file_names in os.walk(path):
+        print('The current folder is ' + folderName)
+
+        for sub_folder in sub_folders:
+            print('SUBFOLDER OF ' + folderName + ': ' + sub_folder)
+        for file_name in file_names:
+            print('FILE INSIDE ' + folderName + ': ' + file_name)
+
+        # print('')

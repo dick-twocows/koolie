@@ -28,6 +28,8 @@ EVENTS_TYPE = '{}/events'.format(NGINX_KEY)
 
 HTTP_TYPE = '{}/http'.format(NGINX_KEY)
 
+CORE_TYPE = '{}/core'.format(NGINX_KEY)
+
 SERVER_TYPE = '{}/server'.format(NGINX_KEY)
 
 LOCATION_TYPE = '{}/location'.format(NGINX_KEY)
@@ -45,6 +47,8 @@ LOAD_POLICY = 'loadPolicy'
 LOAD_POLICY_UNIQUE = 'unique'
 
 LOAD_POLICY_APPEND = 'append'
+
+CORE_KEY = 'core'
 
 SERVER_KEY = 'server'
 
@@ -82,9 +86,7 @@ class NGINXConfig(object):
         self.__load_metadata = dict()
 
         self.__load_from_list = dict()
-        self.__load_from_list[MAIN_TYPE] = self.load_main
-        self.__load_from_list[EVENTS_TYPE] = self.load_events
-        self.__load_from_list[HTTP_TYPE] = self.load_http
+        self.__load_from_list[CORE_TYPE] = self.load_core
         self.__load_from_list[SERVER_TYPE] = self.load_server
         self.__load_from_list[LOCATION_TYPE] = self.load_location
         self.__load_from_list[UPSTREAM_TYPE] = self.load_upstream
@@ -135,6 +137,9 @@ class NGINXConfig(object):
     def get_location_id(self, source) -> str:
         assert source is not None and isinstance(source, dict)
         return '({}){}/{}'.format(self.get_tag(source), source.get(SERVER_KEY), source.get(NAME_KEY))
+
+    def core(self) -> dict:
+        return self.data[CORE_KEY]
 
     def servers(self) -> list:
         return self.data[SERVERS_KEY]
@@ -197,22 +202,24 @@ class NGINXConfig(object):
     def reset_upstreams_folder(self):
         _logging.debug('reset_upstreams_folder()')
         try:
-            if os.path.exists(self.__nginx_upstreams_directory):
-                shutil.rmtree(self.__nginx_upstreams_directory)
-                _logging.debug('Removed upstreams folder [{}]'.format(self.__nginx_upstreams_directory))
-            os.makedirs(self.__nginx_upstreams_directory)
-            _logging.debug('Created upstreams folder [{}]'.format(self.__nginx_upstreams_directory))
+            koolie.tools.common.clear_directory(self.__nginx_upstreams_directory)
+            # if os.path.exists(self.__nginx_upstreams_directory):
+            #     shutil.rmtree(self.__nginx_upstreams_directory)
+            #     _logging.debug('Removed upstreams folder [{}]'.format(self.__nginx_upstreams_directory))
+            # os.makedirs(self.__nginx_upstreams_directory)
+            # _logging.debug('Created upstreams folder [{}]'.format(self.__nginx_upstreams_directory))
         except Exception as exception:
             _logging.warning('Failed to reset upstreams folder.\nException [{}]'.format(exception))
 
     def reset_servers_folder(self):
         _logging.debug('reset_servers_folder()')
         try:
-            if os.path.exists(self.__nginx_servers_directory):
-                shutil.rmtree(self.__nginx_servers_directory)
-                _logging.debug('Removed servers folder [{}]'.format(self.__nginx_servers_directory))
-            os.makedirs(self.__nginx_servers_directory)
-            _logging.debug('Created servers folder [{}]'.format(self.__nginx_servers_directory))
+            koolie.tools.common.clear_directory(self.__nginx_upstreams_directory)
+            # if os.path.exists(self.__nginx_servers_directory):
+            #     shutil.rmtree(self.__nginx_servers_directory)
+            #     _logging.debug('Removed servers folder [{}]'.format(self.__nginx_servers_directory))
+            # os.makedirs(self.__nginx_servers_directory)
+            # _logging.debug('Created servers folder [{}]'.format(self.__nginx_servers_directory))
         except Exception as exception:
             _logging.warning('Failed to reset servers folder.\nException [{}]'.format(exception))
 
@@ -267,6 +274,12 @@ class NGINXConfig(object):
         _logging.debug('load_http()')
         assert isinstance(source, dict)
         self.data[HTTP_TYPE] = source
+
+    def load_core(self, source: dict):
+        _logging.debug('load_core()')
+        assert isinstance(source, dict)
+        _logging.debug('loadPolicy [{}]'.format(source[LOAD_POLICY]))
+        self.__data[CORE_KEY] = source
 
     def load_server(self, source: dict):
         _logging.debug('load_server()')
@@ -401,7 +414,7 @@ class NGINXConfig(object):
                 try:
                     with open(file=source, mode='r') as file:
                         data = file.read()
-                    self.load(yaml.load(koolie.tools.common.substitute(data, **self.__kwargs)))
+                    self.load(yaml.load(koolie.tools.common.safe_substitute(data, **self.__kwargs)))
                 except Exception as exception:
                     _logging.warning('Failed to load file [{}] with exception [{}]'.format(source, exception))
             elif isinstance(source, list):
@@ -428,14 +441,14 @@ class NGINXConfig(object):
         _logging.debug('dump()')
         try:
 
-            # if os.path.exists('{}nginx.conf'.format(nginx_folder)):
-            #     os.remove('{}nginx.conf'.format(nginx_folder))
+            if os.path.exists('{}nginx.conf'.format(self.__nginx_directory)):
+                os.remove('{}nginx.conf'.format(self.__nginx_directory))
 
             self.reset_servers_folder()
 
             self.reset_upstreams_folder()
 
-            # self.dump_nginx()
+            self.dump_core()
 
             self.dump_upstreams()
 
@@ -450,11 +463,11 @@ class NGINXConfig(object):
     def dump_file_comment(self):
         return '# Created by Koolie\n# Load [{}]\n# Dump [{}]\n\n'.format(self.__load_metadata, self.__dump_metadata)
 
-    def dump_nginx(self):
+    def dump_core(self):
         file_name = '{}nginx.conf'.format(self.__nginx_directory)
         with open(file=file_name, mode='w') as file:
             file.write(self.dump_file_comment())
-            file.write(self.data[MAIN_TYPE][CONFIG_KEY])
+            file.write(self.core()[CONFIG_KEY])
             file.write(self.data[EVENTS_TYPE][CONFIG_KEY])
             file.write(self.data[HTTP_TYPE][CONFIG_KEY])
 
@@ -480,7 +493,6 @@ class NGINXConfig(object):
 
     def dump_server(self, server):
         _logging.debug('dump_server()')
-
         file_name = '{}{}.conf'.format(self.__nginx_servers_directory, server[NAME_KEY])
         with open(file=file_name, mode='w') as file:
             file.write(self.common_nginx_conf_comments())
