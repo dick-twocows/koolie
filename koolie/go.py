@@ -115,9 +115,9 @@ pod_status_parser.set_defaults(func=pod_status)
 nginx_parser = subparsers.add_parser('nginx', help='NGINX')
 nginx_parser.set_defaults(func=suffix_help, help_prefix='nginx')
 
-nginx_parser.add_argument('--nginx-directory', type=str, default=default('NGINX_DIRECTORY', NGINX_DIRECTORY))
-nginx_parser.add_argument('--nginx-servers-directory', type=str, default=default('NGINX_SERVERS_DIRECTORY', NGINX_SERVERS_DIRECTORY))
-nginx_parser.add_argument('--nginx-upstreams-directory', type=str, default=default('NGINX_UPSTREAMS_DIRECTORY', NGINX_UPSTREAMS_DIRECTORY))
+nginx_parser.add_argument('--nginx-directory', type=str)
+nginx_parser.add_argument('--nginx-servers-directory', type=str)
+nginx_parser.add_argument('--nginx-upstreams-directory', type=str)
 
 nginx_subparsers = nginx_parser.add_subparsers()
 
@@ -135,7 +135,6 @@ nginx_consume_zookeeper_parser.add_argument('--zookeeper-hosts', type=str, defau
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-kubernetes-pods', type=str, default=default('ZOOKEEPER_KUBERNETES_PODS', ZOOKEEPER_PODS))
 nginx_consume_zookeeper_parser.add_argument('--zookeeper-node-path', type=str, default=default('ZOOKEEPER_NODE_PATH', ZOOKEEPER_ROOT_NODE))
 nginx_consume_zookeeper_parser.add_argument('--config-load-file', type=str, nargs='*')
-nginx_consume_zookeeper_parser.add_argument('--nginx-servers-folder', type=str, help='NGINX servers folder')
 nginx_consume_zookeeper_parser.set_defaults(func=nginx_consume_zookeeper)
 
 # ZooKeeper

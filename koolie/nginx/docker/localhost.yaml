@@ -1,0 +1,15 @@
+- type: "nginx/server"
+  name: "localhost"
+  tag: "NGINX localhost server"
+  loadPolicy: "unique"
+  config: |
+    listen 80;
+    server_name localhost;
+
+    location / {
+        return 404;
+    }
+
+    location /status/ {
+        return 200;
+    }
