@@ -56,8 +56,9 @@ class Consume(koolie.zookeeper_api.node_watch.DeltaNodeWatch):
             self.__change_nginx_config.dump()
             self.__change_nginx_config.dump_stop()
 
-            self.__change_nginx_config.test()
-            self.__change_nginx_config.nginx_conf()
+            # self.__change_nginx_config.test()
+            # self.__change_nginx_config.nginx_conf()
+            self.__change_nginx_config.reload()
 
         self.__change_nginx_config = None
 

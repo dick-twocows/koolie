@@ -4,6 +4,7 @@ import os
 import subprocess
 import shutil
 import time
+import typing
 import koolie.tools.common
 import uuid
 import yaml
@@ -35,6 +36,8 @@ SERVER_TYPE = '{}/server'.format(NGINX_KEY)
 LOCATION_TYPE = '{}/location'.format(NGINX_KEY)
 
 UPSTREAM_TYPE = '{}/upstream'.format(NGINX_KEY)
+
+SOURCE_FILE_KEY = 'sourceFile'
 
 TAG_KEY = 'tag'
 
@@ -214,7 +217,7 @@ class NGINXConfig(object):
     def reset_servers_folder(self):
         _logging.debug('reset_servers_folder()')
         try:
-            koolie.tools.common.clear_directory(self.__nginx_upstreams_directory)
+            koolie.tools.common.clear_directory(self.__nginx_servers_directory)
             # if os.path.exists(self.__nginx_servers_directory):
             #     shutil.rmtree(self.__nginx_servers_directory)
             #     _logging.debug('Removed servers folder [{}]'.format(self.__nginx_servers_directory))
@@ -234,7 +237,7 @@ class NGINXConfig(object):
             self.__load_metadata['load_count'] = 0
             _logging.info('Load start [{}]'.format(self.__load_metadata))
 
-            self.load_from_file(self.get_from_kwargs('config_load_file', list()))
+            self.load_from_file(*self.get_from_kwargs('config_load_file', list()))
         except Exception as exception:
             _logging.warning('Failed to load [{}]'.format(exception))
 
@@ -403,25 +406,23 @@ class NGINXConfig(object):
         except Exception as exception:
             _logging.warning('Failed to load from list [{}:{}]'.format(type(exception), exception))
 
-    def load_from_file(self, source):
-        _logging.debug('load_from_file(source=type:{})'.format(type(source)))
+    def load_from_file(self, *args):
+        _logging.debug('load_from_file(source=[{}])'.format(args))
         try:
-            if source is None:
+            if args is None:
                 _logging.info('Nothing to load.')
                 return
 
-            if isinstance(source, str):
+            for name in args:
                 try:
-                    with open(file=source, mode='r') as file:
+                    with open(file=name, mode='r') as file:
                         data = file.read()
-                    self.load(yaml.load(koolie.tools.common.safe_substitute(data, **self.__kwargs)))
+                    l = yaml.load(koolie.tools.common.safe_substitute(data, **self.__kwargs))
+                    for d in l:
+                        d[SOURCE_FILE_KEY] = name
+                    self.load(l)
                 except Exception as exception:
-                    _logging.warning('Failed to load file [{}] with exception [{}]'.format(source, exception))
-            elif isinstance(source, list):
-                for file in source:
-                    self.load_from_file(file)
-            else:
-                _logging.warning('Unable to load source as a file, unknown type [{}]'.format(type(source)))
+                    _logging.warning('Failed to load file [{}] with exception [{}]'.format(name, exception))
         except Exception as exception:
             _logging.warning('Failed to load from file [{}]'.format(exception))
 
@@ -440,25 +441,24 @@ class NGINXConfig(object):
     def dump(self):
         _logging.debug('dump()')
         try:
-
-            if os.path.exists('{}nginx.conf'.format(self.__nginx_directory)):
-                os.remove('{}nginx.conf'.format(self.__nginx_directory))
+            # if os.path.exists('{}nginx.conf'.format(self.__nginx_directory)):
+            #     os.remove('{}nginx.conf'.format(self.__nginx_directory))
 
             self.reset_servers_folder()
 
             self.reset_upstreams_folder()
 
-            self.dump_core()
-
-            self.dump_upstreams()
+            # self.dump_core()
 
             self.dump_servers()
 
             self.dump_locations()
 
+            self.dump_upstreams()
+
             _logging.info('Dump OK')
         except Exception as exception:
-            _logging.warning('update() Failed to update [{}] [{}]'.format(type(exception), exception))
+            _logging.warning('Failed to dump [{}] [{}]'.format(type(exception), exception))
 
     def dump_file_comment(self):
         return '# Created by Koolie\n# Load [{}]\n# Dump [{}]\n\n'.format(self.__load_metadata, self.__dump_metadata)
@@ -495,10 +495,10 @@ class NGINXConfig(object):
         _logging.debug('dump_server()')
         file_name = '{}{}.conf'.format(self.__nginx_servers_directory, server[NAME_KEY])
         with open(file=file_name, mode='w') as file:
-            file.write(self.common_nginx_conf_comments())
+            file.write(self.dump_file_comment())
             file.write('server {\n')
             file.write(server[CONFIG_KEY])
-            file.write('include {}{}/locations/*.conf;'.format(self.__nginx_servers_directory, server[NAME_KEY]))
+            file.write('\n\ninclude {}{}/*.conf;\n'.format(self.__nginx_servers_directory, server[NAME_KEY]))
             file.write('}')
 
     def dump_locations(self):
@@ -541,6 +541,19 @@ class NGINXConfig(object):
             _logging.debug('Testing NGINX configuration')
             # Load the run prefix in via the args.
             completed_process: subprocess.CompletedProcess = subprocess.run(['docker', 'exec', '-i', 'nginx', 'nginx', '-T'])
+            _logging.debug('Completed process returned [{}]'.format(completed_process))
+            result = completed_process.returncode == 0
+        except Exception as called_process_error:
+            _logging.warning('Failed to reload NGINX [{}]'.format(called_process_error))
+        finally:
+            return result
+
+    def reload(self):
+        result: bool = False
+        try:
+            _logging.debug('Testing NGINX configuration')
+            # Load the run prefix in via the args.
+            completed_process: subprocess.CompletedProcess = subprocess.run(['docker', 'exec', '-i', 'nginx', 'nginx', '-s', 'reload'])
             _logging.debug('Completed process returned [{}]'.format(completed_process))
             result = completed_process.returncode == 0
         except Exception as called_process_error:

@@ -20,20 +20,30 @@ signal.signal(signal.SIGTERM, signal_to_exit)
 
 class Service(abc.ABC):
 
+    CREATED = 2
+    STARTED = 4
+    STOPPED = 8
+
     def __init__(self, **kwargs) -> None:
         super().__init__()
         _logger.debug('kwargs [{}]'.format(kwargs))
         self.__kwargs = kwargs
+        self.__state = Service.CREATED
         self.__exit = None
 
     def signalled_to_exit(self):
         return self.__exit or signalled_to_exit
 
+    def state(self):
+        return self.__state
+
     @abc.abstractmethod
     def start(self):
+        self.__state = Service.STARTED
         self.__exit = False
         while not self.signalled_to_exit():
             self.go()
+        self.__state = Service.STOPPED
 
     @abc.abstractmethod
     def stop(self):
