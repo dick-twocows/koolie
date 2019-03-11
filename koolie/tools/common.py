@@ -1,6 +1,8 @@
 import logging
 import os
+import shutil
 import string
+import traceback
 
 _logger = logging.getLogger(__name__)
 
@@ -34,6 +36,10 @@ def safe_substitute(source, **kwargs):
     return result
 
 
+def ensure_directory(path: str):
+    os.makedirs(path, exist_ok=True)
+
+
 def clear_directory(path: str):
     _logger.debug('clear_directory(path=[{}])'.format(path))
     for folderName, sub_folders, file_names in os.walk(path):
@@ -45,3 +51,7 @@ def clear_directory(path: str):
             print('FILE INSIDE ' + folderName + ': ' + file_name)
 
         # print('')
+
+
+def decode_exception(exception: Exception) -> str:
+    return '{}\n{}'.format(exception, traceback.format_exc())

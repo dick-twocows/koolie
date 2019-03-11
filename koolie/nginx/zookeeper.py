@@ -68,7 +68,7 @@ class Consume(koolie.zookeeper_api.node_watch.DeltaNodeWatch):
         for child in children:
             _logger.debug('Child [{}]'.format(child))
 
-            self.__added_all_nodes.add(child)
+            self.__added_all_nodes.add_item(child)
 
             # Kazoo returns a tuple, [0] is the data (b array) and [1] is the ZooKeeper info (ZnodeStat).
             data: tuple = self.zoo_keeper().get_node_value(self.zookeeper_node_path() + '/' + child)
@@ -84,7 +84,7 @@ class Consume(koolie.zookeeper_api.node_watch.DeltaNodeWatch):
 
             load_count = self.__change_nginx_config.load(j)
             if load_count > 0:
-                self.__added_nginx_nodes.add(child)
+                self.__added_nginx_nodes.add_item(child)
                 _logger.debug('Added child [{}] to NGINX nodes'.format(child))
 
     def removed(self, children):
