@@ -10,9 +10,13 @@ if __name__ == '__main__':
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
     config = koolie.nginx.config.Config()
-    config.add_file('example_nginx_config.yaml')
+    config.load('base_nginx_config.yaml', 'example_nginx_config.yaml')
 
     print(config)
+
+    print(config.items())
+
+    config.dump()
 
     # load = koolie.nginx.load.Load(config)
     # load.start()

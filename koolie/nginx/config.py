@@ -23,23 +23,9 @@ NGINX_SERVERS_DIRECTORY_KEY = 'nginx_servers_directory'
 
 NGINX_UPSTREAMS_DIRECTORY_KEY = 'nginx_upstreams_directory'
 
-NGINX_DIRECTORY_DEAFULT = '/etc/nginx/'
+NGINX_DIRECTORY_DEAFULT = '/tmp/nginx/'
 
-MAIN_TYPE = '{}/main'.format(NGINX_KEY)
-
-EVENTS_TYPE = '{}/events'.format(NGINX_KEY)
-
-HTTP_TYPE = '{}/http'.format(NGINX_KEY)
-
-CORE_TYPE = '{}/core'.format(NGINX_KEY)
-
-SERVER_TYPE = '{}/server'.format(NGINX_KEY)
-
-LOCATION_TYPE = '{}/location'.format(NGINX_KEY)
-
-UPSTREAM_TYPE = '{}/upstream'.format(NGINX_KEY)
-
-SOURCE_FILE_KEY = 'sourceFile'
+SOURCE_KEY = 'source'
 
 TAG_KEY = 'tag'
 
@@ -67,6 +53,9 @@ LOCATION_MATCH_MODIFIER = 'matchModifier'
 LOCATION_LOCATION_MATCH = 'locationMatch'
 
 
+
+NGINX_ROOT_TYPE = 'nginx/root'
+
 NGINX_MAIN_TYPE = 'nginx/main'
 
 NGINX_EVENTS_TYPE = 'nginx/events'
@@ -78,6 +67,11 @@ NGINX_SERVER_TYPE = 'nginx/server'
 NGINX_LOCATION_TYPE = 'nginx/location'
 
 NGINX_UPSTREAM_TYPE = 'nginx/upstream'
+
+
+NGINX_SERVER_PREFIX_FQN = '{}__{}'.format(NGINX_SERVER_TYPE, '_prefix')
+
+NGINX_SERVER_SUFFIX_FQN = '{}__{}'.format(NGINX_SERVER_TYPE, '_suffix')
 
 
 LOAD_METADATA_KEY = 'load_metadata'
@@ -125,11 +119,20 @@ class Base(abc.ABC):
         """
         return '{}__{}'.format(self.type(), self.name())
 
+    def source(self) -> str:
+        return self.data()[SOURCE_KEY]
+
     def tag(self) -> str:
         return self.data()[TAG_KEY]
 
     def __str__(self) -> str:
         return self.fqn()
+
+
+class Root(Base):
+
+    def __init__(self, data: dict = None) -> None:
+        super().__init__(data)
 
 
 class Main(Base):
@@ -205,23 +208,24 @@ class Config(object):
         else:
             self.items()[item.fqn()] = [item]
 
-    add_dispatcher: typing.Dict[str, typing.Callable] = {LOAD_POLICY_APPEND: append_item, LOAD_POLICY_UNIQUE: add_unique_item}
+    load_dispatcher: typing.Dict[str, typing.Callable] = {LOAD_POLICY_APPEND: append_item, LOAD_POLICY_UNIQUE: add_unique_item}
 
     def add_item(self, item: Base):
         assert isinstance(item, Base)
-        self.add_dispatcher[item.load_policy()](self, item)
+        self.load_dispatcher[item.load_policy()](self, item)
 
     item_creator: typing.Dict[str, typing.Callable[[typing.Dict], Base]] = {
-        MAIN_TYPE: Main,
-        EVENTS_TYPE: Events,
-        HTTP_TYPE: HTTP,
-        SERVER_TYPE: Server,
-        LOCATION_TYPE: Location,
-        UPSTREAM_TYPE: Upstream
+        NGINX_ROOT_TYPE: Root,
+        NGINX_MAIN_TYPE: Main,
+        NGINX_EVENTS_TYPE: Events,
+        NGINX_HTTP_TYPE: HTTP,
+        NGINX_SERVER_TYPE: Server,
+        NGINX_LOCATION_TYPE: Location,
+        NGINX_UPSTREAM_TYPE: Upstream
     }
 
-    def add_file(self, *args: typing.List[str]):
-        _logger.debug('add_file()')
+    def load(self, *args: typing.List[typing.Union[str]]):
+        _logger.debug('load()')
         for name in args:
             try:
                 assert isinstance(name, str)
@@ -234,18 +238,96 @@ class Config(object):
                         base: Base = Base(item)
                         self.add_item(self.item_creator[base.type()](base.data()))
                     except Exception as exception:
-                        _logger.warning('add_file() Item exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
+                        _logger.warning('load() Item exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
             except Exception as exception:
-                _logger.warning('add_file() File exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
+                _logger.warning('load() File exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
+
+    # Dump
+
+    def dump(self, **kwargs: typing.Dict[str, str]):
+        _logger.debug('dump()')
+
+        tokens: typing.Dict[str, str] = {
+            'config__nginx_directory': NGINX_DIRECTORY_DEAFULT
+        }
+
+        tokens.update(**kwargs)
+
+        def nginx_directory() -> str:
+            return tokens.get('config__nginx_directory')
+
+        def file_prefix() -> str:
+            return '# Koolie\n\n'
+
+        def write(directory: str, name: str, base: typing.List[Base]):
+            koolie.tools.common.ensure_directory(directory)
+            with open(file='{}{}'.format(directory, name), mode='a') as file:
+                if file.tell() == 0:
+                    file.write(file_prefix())
+                for item in base:
+                    file.write('# FQN [{}]\n'.format(item.fqn()))
+                    file.write(koolie.tools.common.substitute(item.config(), **tokens))
+
+        def dump_root(root: Root):
+            _logger.debug('dump_root()')
+            write(nginx_directory(), 'nginx.conf', [root])
+
+        def dump_main(main: Main):
+            _logger.debug('dump_main()')
+            write(nginx_directory(), 'nginx.conf', [main])
+
+        def dump_events(events: Events):
+            _logger.debug('dump_events()')
+            write(nginx_directory(), 'nginx.conf', [events])
+
+        def dump_http(http: HTTP):
+            _logger.debug('dump_http()')
+
+        server_prefix = Base({TYPE_KEY: 'server_prefix', NAME_KEY: 'server_key', LOAD_POLICY: LOAD_POLICY_UNIQUE, CONFIG_KEY: 'server {\n'})
+
+        server_suffix = Base({TYPE_KEY: 'server_suffix', NAME_KEY: 'server_key', LOAD_POLICY: LOAD_POLICY_UNIQUE, CONFIG_KEY: '}\n'})
+
+        def dump_server(server: Server):
+            _logger.debug('dump_server()')
+            write('{}servers/'.format(nginx_directory()), server.name(), self.items()[NGINX_SERVER_PREFIX_FQN])
+            write('{}servers/'.format(nginx_directory()), server.name(), [server])
+            write('{}servers/'.format(nginx_directory()), server.name(), self.items()[NGINX_SERVER_SUFFIX_FQN])
+
+        def dump_location(location: Location):
+            _logger.debug('dump_location()')
+
+        def dump_upstream(upstream: Upstream):
+            _logger.debug('dump_upstream()')
+            write('{}upstreams/'.format(nginx_directory()), upstream.name(), [upstream])
+
+        dump_dispatcher: typing.Dict[str, typing.Callable[['Config', Base, typing.Dict[str, str]], None]] = {
+            NGINX_ROOT_TYPE: dump_root,
+            NGINX_MAIN_TYPE: dump_main,
+            NGINX_EVENTS_TYPE: dump_events,
+            NGINX_HTTP_TYPE: dump_http,
+            NGINX_SERVER_TYPE: dump_server,
+            NGINX_LOCATION_TYPE: dump_location,
+            NGINX_UPSTREAM_TYPE: dump_upstream
+        }
+
+        _logger.debug('kwargs [{}]'.format('\n'.join(k for k in kwargs.keys())))
+        for fqn in self.items().keys():
+            _logger.debug('dump() FQN [{}]'.format(fqn))
+            for item in self.items()[fqn]:
+                _logger.debug('Item [{}]'.format(item))
+                try:
+                    if item.name().startswith('_'):
+                        _logger.debug('Skipping')
+                    else:
+                        dump_dispatcher[item.type()](item)
+                except Exception as exception:
+                    _logger.warning('dump() Exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
 
     def args(self) -> list:
         return self.__args
 
     def kwargs(self) -> dict:
         return self.__kwargs
-
-    def data(self) -> dict:
-        return self.__data
 
     def load_metadata(self) -> dict:
         return self.data()[LOAD_METADATA_KEY]
@@ -614,7 +696,7 @@ class NGINXConfig(object):
                         data = file.read()
                     l = yaml.load(koolie.tools.common.safe_substitute(data, **self.__kwargs))
                     for d in l:
-                        d[SOURCE_FILE_KEY] = name
+                        d[SOURCE_KEY] = name
                     self.load(l)
                 except Exception as exception:
                     _logger.warning('Failed to load file [{}] with exception [{}]'.format(name, exception))

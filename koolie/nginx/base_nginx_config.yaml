@@ -1,0 +1,112 @@
+- type: "nginx/root"
+  name: "nginx"
+  loadPolicy: "unique"
+  config: |
+    include "${config__nginx_directory}main.conf"
+    include "${config__nginx_directory}events.conf"
+    include "${config__nginx_directory}http.conf"
+
+- type: "nginx/server"
+  name: "_prefix"
+  loadPolicy: "unique"
+  config: |
+    server {
+
+- type: "nginx/server"
+  name: "_suffix"
+  loadPolicy: "unique"
+  config: |
+    }
+
+- type: "nginx/main"
+  name: "main"
+  loadPolicy: "unique"
+  config: |
+    daemon off;
+    error_log /dev/stdout info;
+
+    user  nginx;
+    worker_processes  1;
+
+    pid        /var/run/nginx.pid;
+
+- type: "nginx/events"
+  name: "events"
+  loadPolicy: "unique"
+  config: |
+    worker_connections  1024;
+
+- type: "nginx/http"
+  name: "http"
+  loadPolicy: "unique"
+  config: |
+    include	  /etc/nginx/mime.types;
+    default_type  application/octet-stream;
+
+    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                      '$status $body_bytes_sent "$http_referer" '
+                      '"$http_user_agent" "$http_x_forwarded_for"';
+
+    access_log  /var/log/nginx/access.log  main;
+
+    sendfile        on;
+    #tcp_nopush     on;
+
+    keepalive_timeout  65;
+
+    #gzip  on;
+
+    include /etc/nginx/servers/*.conf;
+
+- type: "nginx/server"
+  name: "default"
+  loadPolicy: "unique"
+  config: |
+    listen 80 default_server;
+
+    listen 443 default_server ssl;
+
+    server_name _;
+
+    ssl_certificate /etc/nginx/secrets/wildcard-yellowdog-tech.crt;
+    ssl_certificate_key /etc/nginx/secrets/wildcard-yellowdog-tech.key;
+
+- type: "nginx/location"
+  name: "404"
+  server: "default"
+  matchModifier: ""
+  locationMatch: "/"
+  loadPolicy: "unique"
+  config: |
+    return 404 "Not found";
+
+- type: "nginx/server"
+  name: "localhost"
+  loadPolicy: "unique"
+  config: |
+    listen 80 default_server;
+
+    listen 443 default_server ssl;
+
+    server_name localhost;
+
+    ssl_certificate /etc/nginx/secrets/wildcard-yellowdog-tech.crt;
+    ssl_certificate_key /etc/nginx/secrets/wildcard-yellowdog-tech.key;
+
+- type: "nginx/location"
+  name: "404"
+  server: "localhost"
+  matchModifier: ""
+  locationMatch: "/"
+  loadPolicy: "unique"
+  config: |
+    return 404 "Not found";
+
+- type: "nginx/location"
+  name: "status"
+  server: "localhost"
+  matchModifier: ""
+  locationMatch: "/status/"
+  loadPolicy: "unique"
+  config: |
+    return 200 "OK";
