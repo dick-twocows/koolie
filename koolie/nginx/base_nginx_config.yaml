@@ -18,6 +18,18 @@
   config: |
     }
 
+- type: "nginx/location"
+  name: "_prefix"
+  loadPolicy: "unique"
+  config: |
+    location ${nginx/upstream.match_modify} ${nginx/upstream.location_match} {{
+
+- type: "nginx/location"
+  name: "_suffix"
+  loadPolicy: "unique"
+  config: |
+    }
+
 - type: "nginx/main"
   name: "main"
   loadPolicy: "unique"

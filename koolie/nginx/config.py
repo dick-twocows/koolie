@@ -1,4 +1,5 @@
 import abc
+import collections
 import datetime
 import logging
 import os
@@ -39,6 +40,8 @@ LOAD_POLICY_UNIQUE = 'unique'
 
 LOAD_POLICY_APPEND = 'append'
 
+LOAD_POLICY_REMOVE = 'remove'
+
 CORE_KEY = 'core'
 
 SERVER_KEY = 'server'
@@ -63,15 +66,25 @@ NGINX_EVENTS_TYPE = 'nginx/events'
 NGINX_HTTP_TYPE = 'nginx/http'
 
 NGINX_SERVER_TYPE = 'nginx/server'
+NGINX_SERVER_PREFIX_TYPE = 'nginx/server_prefix'
+NGINX_SERVER_SUFFIX_TYPE = 'nginx/server_suffix'
 
 NGINX_LOCATION_TYPE = 'nginx/location'
+NGINX_LOCATION_PREFIX_TYPE = 'nginx/location_prefix'
+NGINX_LOCATION_SUFFIX_TYPE = 'nginx/location_suffix'
 
-NGINX_UPSTREAM_TYPE = 'nginx/upstream'
+NGINX_UPSTREAM_TYPE = 'nginx_upstream'
+NGINX_UPSTREAM_PREFIX_TYPE = 'nginx_upstream_prefix'
+NGINX_UPSTREAM_SUFFIX_TYPE = 'nginx_upstream_suffix'
 
 
-NGINX_SERVER_PREFIX_FQN = '{}__{}'.format(NGINX_SERVER_TYPE, '_prefix')
+NGINX_SERVER_PREFIX_FQN = '{}.{}'.format(NGINX_SERVER_TYPE, '_prefix')
 
-NGINX_SERVER_SUFFIX_FQN = '{}__{}'.format(NGINX_SERVER_TYPE, '_suffix')
+NGINX_SERVER_SUFFIX_FQN = '{}.{}'.format(NGINX_SERVER_TYPE, '_suffix')
+
+NGINX_UPSTREAM_PREFIX_FQN = '{}.{}'.format(NGINX_LOCATION_TYPE, '_prefix')
+
+NGINX_UPSTREAM_SUFFIX_FQN = '{}.{}'.format(NGINX_LOCATION_TYPE, '_suffix')
 
 
 LOAD_METADATA_KEY = 'load_metadata'
@@ -92,25 +105,17 @@ class Base(abc.ABC):
             assert isinstance(data, dict)
             self.__data = data
 
-        assert Base.TYPE_PATTERN.match(self.type())
-        assert Base.TYPE_PATTERN.match(self.name())
-        assert Base.TYPE_PATTERN.match(self.load_policy())
-        assert isinstance(self.config(), str)
-
     def data(self) -> dict:
         return self.__data
 
     def type(self) -> str:
-        return self.data()[TYPE_KEY]
+        return self.data().get(TYPE_KEY, '')
 
     def name(self) -> str:
-        return self.data()[NAME_KEY]
+        return self.data().get(NAME_KEY, '')
 
     def load_policy(self) -> str:
-        return self.data()[LOAD_POLICY]
-
-    def config(self) -> str:
-        return self.data()[CONFIG_KEY]
+        return self.data().get(LOAD_POLICY, LOAD_POLICY_UNIQUE)
 
     def fqn(self) -> str:
         """
@@ -120,16 +125,37 @@ class Base(abc.ABC):
         return '{}__{}'.format(self.type(), self.name())
 
     def source(self) -> str:
-        return self.data()[SOURCE_KEY]
+        return self.data().get(SOURCE_KEY, '')
 
     def tag(self) -> str:
-        return self.data()[TAG_KEY]
+        return self.data().self(TAG_KEY, '')
+
+    def tokens(self) -> typing.Dict[str, str]:
+        tokens = {}
+        for k, v in self.data().items():
+            tokens['{}__{}'.format(self.type(), k)] = v
+        return tokens
 
     def __str__(self) -> str:
         return self.fqn()
 
 
-class Root(Base):
+class NGINX(Base):
+
+    def __init__(self, data: dict = None) -> None:
+        super().__init__(data)
+
+    def config(self, substitute: typing.Dict[str, str] = None, self_in_substitute: bool = True) -> str:
+        if substitute is None:
+            return self.data().get(CONFIG_KEY, '')
+
+        if self_in_substitute:
+            return koolie.tools.common.substitute(self.config(), collections.ChainMap(substitute, self.tokens()))
+
+        return koolie.tools.common.substitute(self.config(), substitute)
+
+
+class Root(NGINX):
 
     def __init__(self, data: dict = None) -> None:
         super().__init__(data)
@@ -159,6 +185,18 @@ class Server(Base):
         super().__init__(data)
 
 
+class ServerPrefix(Server):
+
+    def __init__(self, data: dict = None) -> None:
+        super().__init__(data)
+
+
+class ServerSuffix(Server):
+
+    def __init__(self, data: dict = None) -> None:
+        super().__init__(data)
+
+
 class Location(Base):
 
     def __init__(self, data: dict = None) -> None:
@@ -169,6 +207,71 @@ class Location(Base):
 
     def fqn(self) -> str:
         return '{}__{}__{}'.format(self.type(), self.server(), self.name())
+
+    def match_modifier(self) -> str:
+        return self.data()[LOCATION_MATCH_MODIFIER]
+
+    def location_match(self) -> str:
+        return self.data()[LOCATION_LOCATION_MATCH]
+
+
+class Affix(Base):
+
+    def __init__(self, data: dict = None) -> None:
+        super().__init__(data)
+
+
+DEFAULT_LOCATION_PREFIX = [
+    Affix(
+        {
+            TYPE_KEY: NGINX_LOCATION_PREFIX_TYPE,
+            NAME_KEY: '_default',
+            CONFIG_KEY: 'location ${match_modifier} ${location_match} {{\n'
+        }
+    )
+]
+
+DEFAULT_LOCATION_SUFFIX = [
+    Affix(
+        {
+            TYPE_KEY: NGINX_LOCATION_SUFFIX_TYPE,
+            NAME_KEY: '_default',
+            CONFIG_KEY: '}\n'
+        }
+    )
+]
+
+
+DEFAULT_UPSTREAM_PREFIX = [
+    Affix(
+        {
+            TYPE_KEY: NGINX_UPSTREAM_PREFIX_TYPE,
+            NAME_KEY: '_default',
+            CONFIG_KEY: 'upstream ${nginx_upstream__name} {\n'
+        }
+    )
+]
+
+DEFAULT_UPSTREAM_SUFFIX = [
+    Affix(
+        {
+            TYPE_KEY: NGINX_UPSTREAM_SUFFIX_TYPE,
+            NAME_KEY: '_default',
+            CONFIG_KEY: '}\n'
+        }
+    )
+]
+
+class LocationPrefix(Affix):
+
+    def __init__(self, data: dict = None) -> None:
+        super().__init__(data)
+
+
+class LocationSuffix(Affix):
+
+    def __init__(self, data: dict = None) -> None:
+        super().__init__(data)
 
 
 class Upstream(Base):
@@ -220,6 +323,8 @@ class Config(object):
         NGINX_EVENTS_TYPE: Events,
         NGINX_HTTP_TYPE: HTTP,
         NGINX_SERVER_TYPE: Server,
+        NGINX_SERVER_PREFIX_TYPE: ServerPrefix,
+        NGINX_SERVER_SUFFIX_TYPE: ServerSuffix,
         NGINX_LOCATION_TYPE: Location,
         NGINX_UPSTREAM_TYPE: Upstream
     }
@@ -247,19 +352,19 @@ class Config(object):
     def dump(self, **kwargs: typing.Dict[str, str]):
         _logger.debug('dump()')
 
-        tokens: typing.Dict[str, str] = {
+        dump_tokens: typing.Dict[str, str] = {
             'config__nginx_directory': NGINX_DIRECTORY_DEAFULT
         }
 
-        tokens.update(**kwargs)
-
         def nginx_directory() -> str:
-            return tokens.get('config__nginx_directory')
+            return dump_tokens.get('config__nginx_directory')
 
         def file_prefix() -> str:
             return '# Koolie\n\n'
 
-        def write(directory: str, name: str, base: typing.List[Base]):
+        def write(directory: str, name: str, base: typing.List[Base], tokens: typing.Dict[str, str]):
+            _logger.debug('write()')
+            _logger.debug('tokens = [{}]'.format(tokens))
             koolie.tools.common.ensure_directory(directory)
             with open(file='{}{}'.format(directory, name), mode='a') as file:
                 if file.tell() == 0:
@@ -274,18 +379,15 @@ class Config(object):
 
         def dump_main(main: Main):
             _logger.debug('dump_main()')
-            write(nginx_directory(), 'nginx.conf', [main])
+            write(nginx_directory(), 'main.conf', [main])
 
         def dump_events(events: Events):
             _logger.debug('dump_events()')
-            write(nginx_directory(), 'nginx.conf', [events])
+            write(nginx_directory(), 'events.conf', [events])
 
         def dump_http(http: HTTP):
             _logger.debug('dump_http()')
-
-        server_prefix = Base({TYPE_KEY: 'server_prefix', NAME_KEY: 'server_key', LOAD_POLICY: LOAD_POLICY_UNIQUE, CONFIG_KEY: 'server {\n'})
-
-        server_suffix = Base({TYPE_KEY: 'server_suffix', NAME_KEY: 'server_key', LOAD_POLICY: LOAD_POLICY_UNIQUE, CONFIG_KEY: '}\n'})
+            write(nginx_directory(), 'http.conf', [http])
 
         def dump_server(server: Server):
             _logger.debug('dump_server()')
@@ -296,32 +398,47 @@ class Config(object):
         def dump_location(location: Location):
             _logger.debug('dump_location()')
 
-        def dump_upstream(upstream: Upstream):
+        def dump_upstream(parts: typing.List[Upstream]):
             _logger.debug('dump_upstream()')
-            write('{}upstreams/'.format(nginx_directory()), upstream.name(), [upstream])
+
+            tokens = collections.ChainMap(dump_tokens, parts[0].tokens())
+            write('{}upstreams/'.format(nginx_directory()), parts[0].name(), self.items().get(NGINX_UPSTREAM_PREFIX_TYPE, DEFAULT_UPSTREAM_PREFIX), tokens)
+
+            write('{}upstreams/'.format(nginx_directory()), parts[0].name(), self.items().get(NGINX_UPSTREAM_SUFFIX_TYPE, DEFAULT_UPSTREAM_SUFFIX), tokens)
+
+            # tokens = collections.ChainMap(dump_tokens, upstream.data())
+            # write('{}upstreams/'.format(nginx_directory()), upstream.name(), self.items().get('nginx/upstreams._prefix', DEFAULT_LOCATION_PREFIX), tokens)
+            # write('{}upstreams/'.format(nginx_directory()), upstream.name(), [upstream])
+            # write('{}upstreams/'.format(nginx_directory()), upstream.name(), self.items().get('nginx/upstreams._suffix', DEFAULT_LOCATION_SUFFIX))
+
+        def dump_ignore(base: Base):
+            _logger.debug('dump_ignore()')
 
         dump_dispatcher: typing.Dict[str, typing.Callable[['Config', Base, typing.Dict[str, str]], None]] = {
-            NGINX_ROOT_TYPE: dump_root,
-            NGINX_MAIN_TYPE: dump_main,
-            NGINX_EVENTS_TYPE: dump_events,
-            NGINX_HTTP_TYPE: dump_http,
-            NGINX_SERVER_TYPE: dump_server,
-            NGINX_LOCATION_TYPE: dump_location,
+            # NGINX_ROOT_TYPE: dump_root,
+            # NGINX_MAIN_TYPE: dump_main,
+            # NGINX_EVENTS_TYPE: dump_events,
+            # NGINX_HTTP_TYPE: dump_http,
+            # NGINX_SERVER_TYPE: dump_server,
+            # NGINX_LOCATION_TYPE: dump_location,
             NGINX_UPSTREAM_TYPE: dump_upstream
         }
 
-        _logger.debug('kwargs [{}]'.format('\n'.join(k for k in kwargs.keys())))
-        for fqn in self.items().keys():
-            _logger.debug('dump() FQN [{}]'.format(fqn))
-            for item in self.items()[fqn]:
-                _logger.debug('Item [{}]'.format(item))
-                try:
-                    if item.name().startswith('_'):
-                        _logger.debug('Skipping')
-                    else:
-                        dump_dispatcher[item.type()](item)
-                except Exception as exception:
-                    _logger.warning('dump() Exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
+        for parts in self.items().values():
+            dump_dispatcher.get(parts[0].type(), dump_ignore)(parts)
+
+
+        # _logger.debug('kwargs [{}]'.format('\n'.join(k for k in kwargs.keys())))
+        # for fqn in self.items().keys():
+        #     _logger.debug('dump() FQN [{}]'.format(fqn))
+        #     dump_parts(self.items()[fqn])
+            # for item in self.items()[fqn]:
+            #     _logger.debug('Item [{}]'.format(item))
+            #     try:
+            #         # dump_dispatcher.get(item.type(), dump_ignore)(item)
+            #         pass
+            #     except Exception as exception:
+            #         _logger.warning('dump() Exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
 
     def args(self) -> list:
         return self.__args

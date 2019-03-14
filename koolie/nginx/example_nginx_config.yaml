@@ -1,11 +1,11 @@
-- type: "nginx/upstream"
+- type: "nginx_upstream"
   name: "status"
   tag: "pod-1"
   loadPolicy: "append"
   config: |
     server pod-1.koolie.svc.cluster.local:80;
 
-- type: "nginx/upstream"
+- type: "nginx_upstream"
   name: "status"
   tag: "pod-2"
   loadPolicy: "append"
