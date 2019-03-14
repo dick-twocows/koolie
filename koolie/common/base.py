@@ -13,18 +13,18 @@ TAG_KEY = 'tag'
 
 class Base(abc.ABC):
 
-    TYPE_PATTERN = re.compile('[a-zA-Z0-9-]+')
+    ID_PATTERN = re.compile('[a-zA-Z0-9-]+')
 
-    def __init__(self, data: dict = None) -> None:
+    def __init__(self, data: typing.Dict[str, object] = None) -> None:
         super().__init__()
 
         if data is None:
             self.__data = {}
         else:
-            assert isinstance(data, dict)
+            assert isinstance(data, typing.Dict)
             self.__data = data
 
-    def data(self) -> dict:
+    def data(self) -> typing.Dict[str, object]:
         return self.__data
 
     def type(self) -> str:

@@ -114,14 +114,14 @@ class Load(object):
             except Exception as exception:
                 _logger.warning('load_file() Failed to load file [{}] with exception [{}]'.format(name, exception))
 
-    def load_unique(self, item: koolie.nginx.config.Base, items: typing.Dict[str, typing.List]):
+    def load_unique(self, item: koolie.nginx.config.NGINX, items: typing.Dict[str, typing.List]):
         _logger.debug('load_unique')
-        assert isinstance(item, koolie.nginx.config.Base)
+        assert isinstance(item, koolie.nginx.config.NGINX)
         assert item.fqn() not in items.keys()
         # Add a new list containing the item.
         items[item.fqn()] = [item]
 
-    def load_append(self, item: koolie.nginx.config.Base, items: typing.Dict[str, typing.List]):
+    def load_append(self, item: koolie.nginx.config.NGINX, items: typing.Dict[str, typing.List]):
         if item.fqn() in items.keys():
             items[item.fqn()].append(item)
         else:

@@ -92,7 +92,7 @@
   config: |
     return 404 "Not found";
 
-- type: "nginx/server"
+- type: "nginx_server"
   name: "localhost"
   loadPolicy: "unique"
   config: |
