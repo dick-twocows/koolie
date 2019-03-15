@@ -68,8 +68,8 @@ NGINX_EVENTS_TYPE = 'nginx/events'
 NGINX_HTTP_TYPE = 'nginx/http'
 
 NGINX_SERVER_TYPE = 'nginx_server'
-NGINX_SERVER_PREFIX_TYPE = 'nginx/server_prefix'
-NGINX_SERVER_SUFFIX_TYPE = 'nginx/server_suffix'
+NGINX_SERVER_PREFIX_TYPE = 'nginx_server_prefix'
+NGINX_SERVER_SUFFIX_TYPE = 'nginx_server_suffix'
 
 NGINX_LOCATION_TYPE = 'nginx/location'
 NGINX_LOCATION_PREFIX_TYPE = 'nginx/location_prefix'
@@ -176,6 +176,27 @@ class Affix(NGINX):
 
     def __init__(self, data: dict = None) -> None:
         super().__init__(data)
+
+
+DEFAULT_SERVER_PREFIX = [
+    Affix(
+        {
+            TYPE_KEY: NGINX_SERVER_PREFIX_TYPE,
+            NAME_KEY: '_default',
+            CONFIG_KEY: 'server ${nginx_server_prefix__name} {{\n'  # 'server ${{}} {{\n'.format(NGINX_SERVER_PREFIX_TYPE)
+        }
+    )
+]
+
+DEFAULT_SERVER_SUFFIX = [
+    Affix(
+        {
+            TYPE_KEY: NGINX_UPSTREAM_SUFFIX_TYPE,
+            NAME_KEY: '_default',
+            CONFIG_KEY: '}\n'
+        }
+    )
+]
 
 
 DEFAULT_LOCATION_PREFIX = [
@@ -298,19 +319,33 @@ class Config(object):
                 for item in items:
                     try:
                         nginx: NGINX = NGINX(item)
+
                         self.add_item(self.item_creator[nginx.type()](nginx.data()))
                     except Exception as exception:
                         _logger.warning('load() Item exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
             except Exception as exception:
                 _logger.warning('load() File exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
-
     # Dump
 
-    def dump_server(self, servers: typing.List[Server], tokens: typing.Dict[str, str]):
-        for server in servers:
-            _logger.debug('Server [{}]'.format(server))
-            config = '# FQN [{}]\n{}'.format(server.fqn(), server.config(tokens, True))
+    def dump_config(self, bases: typing.List[NGINX], prefixes: typing.List[NGINX], suffixes: typing.List[NGINX], tokens: typing.Dict[str, str]) -> str:
+        _logger.debug('dump_config()')
+
+        if prefixes is not None:
+            prefix = self.dump_config(prefixes, None, None, tokens)
+            _logger.debug('prefix[ {}]'.format(prefix))
+
+        for base in bases:
+            _logger.debug('NGINX [{}]'.format(base))
+            config = '# FQN [{}]\n{}'.format(base.fqn(), base.config(tokens, True))
             _logger.debug('Config [{}]'.format(config))
+
+        if suffixes is not None:
+            suffix = self.dump_config(suffixes, None, None, tokens)
+            _logger.debug('prefix[ {}]'.format(suffix))
+
+    def dump_server(self, servers: typing.List[Server], tokens: typing.Dict[str, str]):
+        _logger.debug('dump_server()')
+        self.dump_config(servers, self.items().get(NGINX_SERVER_PREFIX_TYPE, DEFAULT_SERVER_PREFIX), self.items().get(NGINX_SERVER_SUFFIX_TYPE, DEFAULT_SERVER_SUFFIX), tokens)
 
     def dump_ignore(self, nginx: NGINX, tokens: typing.Dict[str, str]):
         _logger.warning('dump_ignore() nginx [{}]'.format(nginx))
