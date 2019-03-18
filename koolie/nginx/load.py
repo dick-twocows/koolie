@@ -198,7 +198,7 @@ class Load(object):
         _logger.debug('load_location()')
         try:
             assert isinstance(location, dict)
-            {LOAD_POLICY_APPEND: self.load_location_append, LOAD_POLICY_UNIQUE: self.load_location_unique}[location[koolie.nginx.config.LOAD_POLICY]](location)
+            {LOAD_POLICY_APPEND: self.load_location_append, LOAD_POLICY_UNIQUE: self.load_location_unique}[location[koolie.nginx.config.LOAD_POLICY_KEY]](location)
             self.load_success()
         except Exception as exception:
             _logger.warning('load_location() Exception [{}]'.format(koolie.tools.common.decode_exception(exception)))

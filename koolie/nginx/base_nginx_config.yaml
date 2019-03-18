@@ -1,4 +1,8 @@
-- type: "nginx/root"
+- type: "token_add"
+  name: "foo"
+  value: "bar"
+
+- type: "nginx_root"
   name: "nginx"
   loadPolicy: "unique"
   config: |
@@ -6,71 +10,47 @@
     include "${config__nginx_directory}events.conf"
     include "${config__nginx_directory}http.conf"
 
-- type: "nginx/server"
-  name: "_prefix"
-  loadPolicy: "unique"
-  config: |
-    server {
-
-- type: "nginx/server"
-  name: "_suffix"
-  loadPolicy: "unique"
-  config: |
-    }
-
-- type: "nginx/location"
-  name: "_prefix"
-  loadPolicy: "unique"
-  config: |
-    location ${nginx/upstream.match_modify} ${nginx/upstream.location_match} {{
-
-- type: "nginx/location"
-  name: "_suffix"
-  loadPolicy: "unique"
-  config: |
-    }
-
-- type: "nginx/main"
+- type: "nginx_main"
   name: "main"
   loadPolicy: "unique"
   config: |
     daemon off;
     error_log /dev/stdout info;
 
-    user  nginx;
-    worker_processes  1;
+    user nginx;
+    worker_processes 3;
 
-    pid        /var/run/nginx.pid;
+    pid /var/run/nginx.pid;
 
-- type: "nginx/events"
+- type: "nginx_events"
   name: "events"
   loadPolicy: "unique"
   config: |
-    worker_connections  1024;
+    worker_connections 1024;
 
-- type: "nginx/http"
+- type: "nginx_http"
   name: "http"
   loadPolicy: "unique"
   config: |
-    include	  /etc/nginx/mime.types;
-    default_type  application/octet-stream;
+    include	/etc/nginx/mime.types;
+    default_type application/octet-stream;
 
-    log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+    log_format main  '$remote_addr - $remote_user [$time_local] "$request" '
                       '$status $body_bytes_sent "$http_referer" '
                       '"$http_user_agent" "$http_x_forwarded_for"';
 
-    access_log  /var/log/nginx/access.log  main;
+    access_log /var/log/nginx/access.log main;
 
-    sendfile        on;
+    sendfile on;
     #tcp_nopush     on;
 
-    keepalive_timeout  65;
+    keepalive_timeout 65;
 
-    #gzip  on;
+    #gzip on;
 
-    include /etc/nginx/servers/*.conf;
+    include ${config__nginx_servers_directory}*.conf; /etc/nginx/servers/*.conf;
 
-- type: "nginx/server"
+- type: "nginx_server"
   name: "default"
   loadPolicy: "unique"
   config: |
@@ -83,7 +63,7 @@
     ssl_certificate /etc/nginx/secrets/wildcard-yellowdog-tech.crt;
     ssl_certificate_key /etc/nginx/secrets/wildcard-yellowdog-tech.key;
 
-- type: "nginx/location"
+- type: "nginx_location"
   name: "404"
   server: "default"
   matchModifier: ""
@@ -105,7 +85,7 @@
     ssl_certificate /etc/nginx/secrets/wildcard-yellowdog-tech.crt;
     ssl_certificate_key /etc/nginx/secrets/wildcard-yellowdog-tech.key;
 
-- type: "nginx/location"
+- type: "nginx_location"
   name: "404"
   server: "localhost"
   matchModifier: ""
@@ -114,7 +94,7 @@
   config: |
     return 404 "Not found";
 
-- type: "nginx/location"
+- type: "nginx_location"
   name: "status"
   server: "localhost"
   matchModifier: ""

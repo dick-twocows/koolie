@@ -1,0 +1,3 @@
+- type: "koolie_token"
+  name: "foo"
+  value: "bar"

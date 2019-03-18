@@ -7,7 +7,7 @@ import koolie.nginx.dump
 
 
 if __name__ == '__main__':
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
     config = koolie.nginx.config.Config()
     config.load('base_nginx_config.yaml', 'example_nginx_config.yaml')
@@ -17,6 +17,8 @@ if __name__ == '__main__':
     print(config.items())
 
     config.dump()
+
+    print
 
     # load = koolie.nginx.load.Load(config)
     # load.start()
