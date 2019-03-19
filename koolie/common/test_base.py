@@ -15,3 +15,4 @@ if __name__ == '__main__':
     print(type(base))
     print(base.type())
     print(base.tag())
+    print(base.value())

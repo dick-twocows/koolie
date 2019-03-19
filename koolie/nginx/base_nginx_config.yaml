@@ -1,6 +1,10 @@
-- type: "token_add"
+- type: "koolie_token"
   name: "foo"
   value: "bar"
+
+- type: "koolie_token"
+  name: "bad load value"
+  load: "foobar"
 
 - type: "nginx_root"
   name: "nginx"

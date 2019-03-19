@@ -20,11 +20,14 @@ TAG_KEY = 'tag'
 
 VALUE_KEY = 'value'
 
+
 LOAD_APPEND = 'append'
 
 LOAD_UNIQUE = 'unique'
 
+
 TOKEN_TYPE = 'koolie_token'
+
 
 class Base(abc.ABC):
 
@@ -66,7 +69,7 @@ class Base(abc.ABC):
         return tokens
 
     def __str__(self) -> str:
-        return self.fqn()
+        return ', '.join('[{}]=[{}]'.format(k, v) for k, v in self.__data.items())
 
 
 class Token(Base):
@@ -80,55 +83,81 @@ class Token(Base):
 
 class Load(object):
 
+    LoaderSignature = typing.Callable[[typing.Type[Base]], None]
+
     def __init__(self) -> None:
         super().__init__()
 
-        self.__items: typing.Dict[str, typing.List[Base]] = dict()
+        self.__keys: typing.Set[str] = set()
 
-        self.__base_creator = dict()
-        self.__base_creator[TOKEN_TYPE] = Token
+        self.__items: typing.List[typing.Type[Base]] = list()
 
-        self.__add_dispatcher: typing.Dict[str, typing.Callable[[Base], None]] = dict()
-        self.__add_dispatcher[LOAD_APPEND] = self.append
-        self.__add_dispatcher[LOAD_UNIQUE] = self.unique
+        self.__creators = {
+            TOKEN_TYPE: Token
+        }
+
+        self.__loaders: typing.Dict[str, Load.LoaderSignature] = {
+            LOAD_APPEND: self.append,
+            LOAD_UNIQUE: self.unique
+        }
+
+    def keys(self) -> typing.Set[str]:
+        return self.__keys
 
     def items(self):
         return self.__items
 
-    def create(self, **kwargs):
-        return self.__base_creator.get(kwargs[TYPE_KEY], Base)
+    def creators(self) -> typing.Dict[str, typing.Callable[..., Base]]:
+        return self.__creators
 
-    def unique(self, base: Base):
+    def loaders(self) -> typing.Dict[str, typing.Callable[[typing.Type[Base]], None]]:
+        return self.__loaders
+
+    def loader_for(self, base: typing.Type[Base]) -> LoaderSignature:
+        loader: Load.LoaderSignature = self.loaders().get(base.load())
+        if loader is None:
+            _logger.warning('Failed to get loader for [{}]'.format(base))
+        return loader
+
+    def create(self, **kwargs) -> typing.Type[Base]:
+        return self.__creators.get(kwargs[TYPE_KEY], Base)
+
+    def unique(self, base: typing.Type[Base]):
         _logger.debug('unique()')
-        assert isinstance(base, Base)
-        assert base.fqn() not in self.items().keys()
-        self.items()[base.fqn()] = [base]
+        if base.fqn() in self.keys():
+            _logger.warning('Failed to load unique, FQN [{}] already exists'.format(base.fqn()))
+            return
+        self.keys().add(base.fqn())
+        self.items().append(base)
 
-    def append(self, base: Base):
-        _logger.debug('append_item()')
-        assert isinstance(base, Base)
-        if base.fqn() in self.items().keys():
-            self.items()[base.fqn()].append(base)
-        else:
-            self.items()[base.fqn()] = [base]
+    def append(self, base: typing.Type[Base]):
+        _logger.debug('append()')
+        if base.fqn() not in self.keys():
+            self.keys().add(base.fqn())
+        self.items().append(base)
 
-    def add(self, base: Base):
-        self.__add_dispatcher[base.load()](base)
+    def add(self, base: typing.Type[Base]):
+        loader: Load.LoaderSignature = self.loader_for(base)
+        if loader is not None:
+            loader(base)
 
     def load(self, *args: typing.List[typing.Union[str]]):
         _logger.debug('load()')
         for name in args:
             try:
                 assert isinstance(name, str)
-                _logger.debug('add_file() name=[{}]'.format(name))
+                _logger.info('Loading [{}]'.format(name))
                 with open(file=name, mode='r') as file:
                     raw = file.read()
                 items: typing.List[typing.Dict] = yaml.load(raw)
+                _logger.info('[{}] items to load'.format(len(items)))
                 for data in items:
                     try:
-                        b = self.create(**data)
-                        self.add(b(**data))
+                        self.add(self.create(**data)(**data))
                     except Exception as exception:
-                        _logger.warning('load() Item exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
+                        _logger.warning('load() Item exception [{}]'.format(koolie.tools.common.decode_exception(exception, logger=_logger)))
             except Exception as exception:
-                _logger.warning('load() File exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
+                _logger.warning('load() File exception [{}]'.format(koolie.tools.common.decode_exception(exception, logger=_logger)))
+
+    def __str__(self) -> str:
+        return len(self.items())

@@ -1,12 +1,7 @@
 import collections
-import datetime
 import logging
-import os
-import subprocess
-import time
 import typing
 import koolie.tools.common
-import uuid
 import yaml
 
 import koolie.common.base
@@ -92,28 +87,10 @@ TOKEN_ADD_TYPE = 'token_add'
 VALUE_KEY = 'value'
 
 
-class Token(koolie.common.base.Base):
-
-    def __init__(self, data: typing.Dict[str, object] = None) -> None:
-        super().__init__(data)
-
-
-class TokenAdd(Token):
-
-    def __init__(self, data: typing.Dict[str, object] = None) -> None:
-        super().__init__(data)
-
-    def value(self) -> str:
-        return self._data().get(VALUE_KEY)
-
-
 class NGINX(koolie.common.base.Base):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
-
-    def load_policy(self) -> str:
-        return self._data().get(LOAD_POLICY_KEY, '')
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
     def config(self, substitute: typing.Dict[str, str] = None, self_in_substitute: bool = True) -> str:
         if substitute is None:
@@ -127,50 +104,50 @@ class NGINX(koolie.common.base.Base):
 
 class Root(NGINX):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
 
 class Main(NGINX):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
 
 class Events(NGINX):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
 
 class HTTP(NGINX):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
 
 class Server(NGINX):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
 
 class ServerPrefix(Server):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
 
 class ServerSuffix(Server):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
 
 class Location(NGINX):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
     def server(self) -> str:
         return self._data()[SERVER_KEY]
@@ -187,8 +164,8 @@ class Location(NGINX):
 
 class Affix(NGINX):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
 
 
 DEFAULT_SERVER_PREFIX = [
@@ -268,8 +245,18 @@ class LocationSuffix(Affix):
 
 class Upstream(NGINX):
 
-    def __init__(self, data: dict = None) -> None:
-        super().__init__(data)
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+
+class LoadConfig(koolie.common.base.Load):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        self.creators().update(
+            NGINX_SERVER_TYPE=Server
+        )
 
 
 class Config(object):

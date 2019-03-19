@@ -1,7 +1,8 @@
+import linecache
 import logging
 import os
-import shutil
 import string
+import sys
 import traceback
 
 _logger = logging.getLogger(__name__)
@@ -53,5 +54,20 @@ def clear_directory(path: str):
         # print('')
 
 
-def decode_exception(exception: Exception) -> str:
-    return '{}\n{}'.format(exception, traceback.format_exc())
+def decode_exception(exception: Exception, **kwargs) -> str:
+    exc_type, exc_obj, tb = sys.exc_info()
+    f = tb.tb_frame
+    lineno = tb.tb_lineno
+    filename = f.f_code.co_filename
+    linecache.checkcache(filename)
+    line = linecache.getline(filename, lineno, f.f_globals)
+
+    logger: logging.Logger = kwargs.get('logger')
+    if logger is None:
+        return '{}'.format(exception)
+    else:
+        if logger.isEnabledFor(logging.DEBUG):
+            return '{}\n{}'.format(exception, traceback.format_exc())
+        else:
+            return '{}'.format(exception)
+
