@@ -6,7 +6,7 @@ import typing
 import uuid
 import yaml
 
-import koolie.nginx.config
+import koolie.nginx.config_old
 import koolie.tools.common
 
 _logger = logging.getLogger(__name__)
@@ -45,11 +45,11 @@ class Load(object):
     METADATA_STOPPED = 'stopped'
     METADATA_LOAD_COUNT = 'loadCount'
 
-    def __init__(self, config: koolie.nginx.config.Config) -> None:
+    def __init__(self, config: koolie.nginx.config_old.Config) -> None:
         super().__init__()
 
         if config is None:
-            self.__config = koolie.nginx.config.Config()
+            self.__config = koolie.nginx.config_old.Config()
         else:
             self.__config = config
 
@@ -71,7 +71,7 @@ class Load(object):
     def loaders(self) -> dict:
         return self.__loaders
 
-    def config(self) -> koolie.nginx.config.Config:
+    def config(self) -> koolie.nginx.config_old.Config:
         return self.__config
 
     def load_success(self):
@@ -114,14 +114,14 @@ class Load(object):
             except Exception as exception:
                 _logger.warning('load_file() Failed to load file [{}] with exception [{}]'.format(name, exception))
 
-    def load_unique(self, item: koolie.nginx.config.NGINX, items: typing.Dict[str, typing.List]):
+    def load_unique(self, item: koolie.nginx.config_old.NGINX, items: typing.Dict[str, typing.List]):
         _logger.debug('load_unique')
-        assert isinstance(item, koolie.nginx.config.NGINX)
+        assert isinstance(item, koolie.nginx.config_old.NGINX)
         assert item.fqn() not in items.keys()
         # Add a new list containing the item.
         items[item.fqn()] = [item]
 
-    def load_append(self, item: koolie.nginx.config.NGINX, items: typing.Dict[str, typing.List]):
+    def load_append(self, item: koolie.nginx.config_old.NGINX, items: typing.Dict[str, typing.List]):
         if item.fqn() in items.keys():
             items[item.fqn()].append(item)
         else:
@@ -133,7 +133,7 @@ class Load(object):
         _logger.debug('load_main()')
         try:
             assert isinstance(source, typing.Dict)
-            self.config().add_item(koolie.nginx.config.Main(source))
+            self.config().add_item(koolie.nginx.config_old.Main(source))
             self.load_success()
         except Exception as exception:
             _logger.warning('load_main() Failed with exception [{}]'.format(exception))
@@ -158,7 +158,7 @@ class Load(object):
 
     # Servers
 
-    def load_server_unique(self, server: koolie.nginx.config.Server):
+    def load_server_unique(self, server: koolie.nginx.config_old.Server):
         _logger.debug('load_server_unique()')
         try:
             assert server.fqn() not in self.config().servers().keys()
@@ -167,13 +167,13 @@ class Load(object):
         except Exception as exception:
             _logger.warning('load_server() Failed with exception [{}]'.format(exception))
 
-    server_load_policy = {koolie.nginx.config.LOAD_POLICY_UNIQUE: load_server_unique}
+    server_load_policy = {koolie.nginx.config_old.LOAD_POLICY_UNIQUE: load_server_unique}
 
     def load_server(self, source: dict):
         _logger.debug('load_server()')
         try:
             assert isinstance(source, dict)
-            server = koolie.nginx.config.Server(source)
+            server = koolie.nginx.config_old.Server(source)
             self.server_load_policy[server.load_policy()](self, server)
             self.load_success()
         except Exception as exception:
@@ -183,7 +183,7 @@ class Load(object):
 
     def location_fqn(self, location: dict) -> str:
         assert isinstance(location, dict)
-        return '{}_{}'.format(location[koolie.nginx.config.SERVER_KEY], koolie.nginx.config.NAME_KEY)
+        return '{}_{}'.format(location[koolie.nginx.config_old.SERVER_KEY], koolie.nginx.config_old.NAME_KEY)
 
     def load_location_unique(self, location: dict):
         assert isinstance(location, dict)
@@ -198,7 +198,7 @@ class Load(object):
         _logger.debug('load_location()')
         try:
             assert isinstance(location, dict)
-            {LOAD_POLICY_APPEND: self.load_location_append, LOAD_POLICY_UNIQUE: self.load_location_unique}[location[koolie.nginx.config.LOAD_POLICY_KEY]](location)
+            {LOAD_POLICY_APPEND: self.load_location_append, LOAD_POLICY_UNIQUE: self.load_location_unique}[location[koolie.nginx.config_old.LOAD_POLICY_KEY]](location)
             self.load_success()
         except Exception as exception:
             _logger.warning('load_location() Exception [{}]'.format(koolie.tools.common.decode_exception(exception)))

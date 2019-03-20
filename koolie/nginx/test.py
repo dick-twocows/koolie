@@ -1,7 +1,7 @@
 import logging
 import sys
 
-import koolie.nginx.config
+import koolie.nginx.config_old
 import koolie.nginx.load
 import koolie.nginx.dump
 
@@ -9,7 +9,7 @@ import koolie.nginx.dump
 if __name__ == '__main__':
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-    config = koolie.nginx.config.Config()
+    config = koolie.nginx.config_old.Config()
     config.load('base_nginx_config.yaml', 'example_nginx_config.yaml')
 
     print(config)

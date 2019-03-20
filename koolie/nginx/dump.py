@@ -4,7 +4,7 @@ import time
 import uuid
 
 import koolie.tools.common
-import koolie.nginx.config
+import koolie.nginx.config_old
 
 _logger = logging.getLogger(__name__)
 
@@ -15,17 +15,17 @@ METADATA_STOPPED = 'stopped'
 
 class Dump(object):
 
-    def __init__(self, config: koolie.nginx.config.Config) -> None:
+    def __init__(self, config: koolie.nginx.config_old.Config) -> None:
         super().__init__()
 
         if config is None:
-            self.__config = koolie.nginx.config.Config()
+            self.__config = koolie.nginx.config_old.Config()
         else:
             self.__config = config
 
         self.__metadata = {}
 
-    def config(self) -> koolie.nginx.config.Config:
+    def config(self) -> koolie.nginx.config_old.Config:
         return self.__config
 
     def metadata(self) -> dict:
@@ -39,7 +39,7 @@ class Dump(object):
         self.metadata()[METADATA_STOPPED] = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
 
     def source_id(self, source: dict) -> str:
-        return '{}/{}/{}'.format(source[koolie.nginx.config.TYPE_KEY], source[koolie.nginx.config.NAME_KEY], source.get(koolie.nginx.config.TAG_KEY))
+        return '{}/{}/{}'.format(source[koolie.nginx.config_old.TYPE_KEY], source[koolie.nginx.config_old.NAME_KEY], source.get(koolie.nginx.config_old.TAG_KEY))
 
     def file_prefix(self) -> str:
         return \
@@ -59,7 +59,7 @@ class Dump(object):
     def dump_config(self, file, items: list):
         for item in items:
             file.write(self.block_prefix(item))
-            file.write(item[koolie.nginx.config.CONFIG_KEY])
+            file.write(item[koolie.nginx.config_old.CONFIG_KEY])
             file.write('\n\n')
 
     def dump_nginx(self):
@@ -119,10 +119,10 @@ class Dump(object):
                 print(location)
                 print(self.config().locations()[location][0])
 
-                directory_name = '{}servers/{}/'.format(self.config().nginx_directory(), self.config().locations()[location][0][koolie.nginx.config.SERVER_KEY])
+                directory_name = '{}servers/{}/'.format(self.config().nginx_directory(), self.config().locations()[location][0][koolie.nginx.config_old.SERVER_KEY])
 
                 print('')
-                # koolie.tools.common.ensure_directory(directory_name)
+                # koolie.tools.config.ensure_directory(directory_name)
                 # file_name = '{}{}.conf'.format(directory_name, location)
                 # with open(file=file_name, mode='w') as file:
                 #     file.write(self.file_prefix())

@@ -4,7 +4,7 @@ import typing
 import koolie.tools.common
 import yaml
 
-import koolie.common.base
+import koolie.config.item
 
 _logger = logging.getLogger(__name__)
 
@@ -87,14 +87,14 @@ TOKEN_ADD_TYPE = 'token_add'
 VALUE_KEY = 'value'
 
 
-class NGINX(koolie.common.base.Base):
+class NGINX(koolie.config.item.Item):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
     def config(self, substitute: typing.Dict[str, str] = None, self_in_substitute: bool = True) -> str:
         if substitute is None:
-            return self._data().get(CONFIG_KEY, '')
+            return self.data().get(CONFIG_KEY, '')
 
         if self_in_substitute:
             return koolie.tools.common.substitute(self.config(), **collections.ChainMap(substitute, self.tokens()))
@@ -150,16 +150,16 @@ class Location(NGINX):
         super().__init__(**kwargs)
 
     def server(self) -> str:
-        return self._data()[SERVER_KEY]
+        return self.data()[SERVER_KEY]
 
     def fqn(self) -> str:
         return '{}.{}.{}'.format(self.type(), self.server(), self.name())
 
     def match_modifier(self) -> str:
-        return self._data()[LOCATION_MATCH_MODIFIER]
+        return self.data()[LOCATION_MATCH_MODIFIER]
 
     def location_match(self) -> str:
-        return self._data()[LOCATION_LOCATION_MATCH]
+        return self.data()[LOCATION_LOCATION_MATCH]
 
 
 class Affix(NGINX):
@@ -171,8 +171,8 @@ class Affix(NGINX):
 DEFAULT_SERVER_PREFIX = [
     Affix(
         {
-            koolie.common.base.TYPE_KEY: NGINX_SERVER_PREFIX_TYPE,
-            koolie.common.base.NAME_KEY: 'default',
+            koolie.config.item.TYPE_KEY: NGINX_SERVER_PREFIX_TYPE,
+            koolie.config.item.NAME_KEY: 'default',
             CONFIG_KEY: 'server ${nginx_server_prefix__name} {{\n'
         }
     )
@@ -181,8 +181,8 @@ DEFAULT_SERVER_PREFIX = [
 DEFAULT_SERVER_SUFFIX = [
     Affix(
         {
-            koolie.common.base.TYPE_KEY: NGINX_SERVER_SUFFIX_TYPE,
-            koolie.common.base.NAME_KEY: 'default',
+            koolie.config.item.TYPE_KEY: NGINX_SERVER_SUFFIX_TYPE,
+            koolie.config.item.NAME_KEY: 'default',
             CONFIG_KEY: '}\n'
         }
     )
@@ -192,8 +192,8 @@ DEFAULT_SERVER_SUFFIX = [
 DEFAULT_LOCATION_PREFIX = [
     Affix(
         {
-            koolie.common.base.TYPE_KEY: NGINX_LOCATION_PREFIX_TYPE,
-            koolie.common.base.NAME_KEY: 'default',
+            koolie.config.item.TYPE_KEY: NGINX_LOCATION_PREFIX_TYPE,
+            koolie.config.item.NAME_KEY: 'default',
             CONFIG_KEY: 'location ${nginx_location__match_modifier} ${nginx_location__location_match} {{\n'
         }
     )
@@ -202,8 +202,8 @@ DEFAULT_LOCATION_PREFIX = [
 DEFAULT_LOCATION_SUFFIX = [
     Affix(
         {
-            koolie.common.base.TYPE_KEY: NGINX_LOCATION_SUFFIX_TYPE,
-            koolie.common.base.NAME_KEY: 'default',
+            koolie.config.item.TYPE_KEY: NGINX_LOCATION_SUFFIX_TYPE,
+            koolie.config.item.NAME_KEY: 'default',
             CONFIG_KEY: '}\n'
         }
     )
@@ -213,8 +213,8 @@ DEFAULT_LOCATION_SUFFIX = [
 DEFAULT_UPSTREAM_PREFIX = [
     Affix(
         {
-            koolie.common.base.TYPE_KEY: NGINX_UPSTREAM_PREFIX_TYPE,
-            koolie.common.base.NAME_KEY: '_default',
+            koolie.config.item.TYPE_KEY: NGINX_UPSTREAM_PREFIX_TYPE,
+            koolie.config.item.NAME_KEY: '_default',
             CONFIG_KEY: 'upstream ${nginx_upstream__name} {\n'
         }
     )
@@ -223,8 +223,8 @@ DEFAULT_UPSTREAM_PREFIX = [
 DEFAULT_UPSTREAM_SUFFIX = [
     Affix(
         {
-            koolie.common.base.TYPE_KEY: NGINX_UPSTREAM_SUFFIX_TYPE,
-            koolie.common.base.NAME_KEY: '_default',
+            koolie.config.item.TYPE_KEY: NGINX_UPSTREAM_SUFFIX_TYPE,
+            koolie.config.item.NAME_KEY: '_default',
             CONFIG_KEY: '}\n'
         }
     )
@@ -249,7 +249,7 @@ class Upstream(NGINX):
         super().__init__(**kwargs)
 
 
-class LoadConfig(koolie.common.base.Load):
+class LoadConfig(koolie.config.item.Load):
 
     def __init__(self) -> None:
         super().__init__()
@@ -330,7 +330,7 @@ class Config(object):
                     try:
                         nginx: NGINX = NGINX(item)
 
-                        self.add_item(self.item_creator[nginx.type()](nginx._data()))
+                        self.add_item(self.item_creator[nginx.type()](nginx.data()))
                     except Exception as exception:
                         _logger.warning('load() Item exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
             except Exception as exception:
@@ -424,7 +424,7 @@ class Config(object):
             #         # dump_dispatcher.get(item.type(), dump_ignore)(item)
             #         pass
             #     except Exception as exception:
-            #         _logger.warning('dump() Exception [{}]'.format(koolie.tools.common.decode_exception(exception)))
+            #         _logger.warning('dump() Exception [{}]'.format(koolie.tools.config.decode_exception(exception)))
 
     def args(self) -> list:
         return self.__args

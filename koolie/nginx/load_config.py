@@ -1,13 +1,13 @@
 import logging
 import sys
 
-import koolie.common.base
+import koolie.config.item
 
 _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.DEBUG)
 
 
-class Load(koolie.common.base.Load):
+class Load(koolie.config.item.Load):
 
     def __init__(self) -> None:
         super().__init__()
