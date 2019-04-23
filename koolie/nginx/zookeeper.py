@@ -1,7 +1,7 @@
 import logging
 import yaml
 
-import koolie.nginx.config_old
+import koolie.nginx.config
 import koolie.pod_api.pod_status
 import koolie.zookeeper_api.node_watch
 
@@ -30,7 +30,7 @@ class Consume(koolie.zookeeper_api.node_watch.DeltaNodeWatch):
         self.__removed_nginx_nodes: set = None
 
     def change(self, children):
-        self.__change_nginx_config = koolie.nginx.config_old.NGINXConfig(**self.__kwargs)
+        self.__change_nginx_config = koolie.nginx.config.NGINXConfig(**self.__kwargs)
         self.__added_all_nodes = set()
         self.__added_nginx_nodes = set()
 

@@ -12,7 +12,7 @@ ZOOKEEPER_NODE_PATH: str = 'ZOOKEEPER_NODE_PATH'
 ZOOKEEPER_NODE_PATH_DEFAULT: str = '/'
 
 
-class ZooKeeper(object):
+class KoolieZooKeeper(object):
 
     def __init__(self, **kwargs):
         _logging.debug('ZooKeeper.__init__()')
@@ -78,13 +78,24 @@ class WithZooKeeper(object):
 
     def __init__(self, **kwargs) -> None:
         super().__init__()
-        self.zoo_keeper = ZooKeeper(**kwargs)
+        self.zoo_keeper = KoolieZooKeeper(**kwargs)
 
     @property
-    def zoo_keeper(self) -> ZooKeeper:
+    def zoo_keeper(self) -> KoolieZooKeeper:
         return self.__zoo_keeper
 
     @zoo_keeper.setter
-    def zoo_keeper(self, zoo_keeper: ZooKeeper):
-        assert zoo_keeper is None or isinstance(zoo_keeper, ZooKeeper)
+    def zoo_keeper(self, zoo_keeper: KoolieZooKeeper):
+        assert zoo_keeper is None or isinstance(zoo_keeper, KoolieZooKeeper)
         self.__zoo_keeper = zoo_keeper
+
+    def __str__(self) -> str:
+        return str(self.zoo_keeper)
+
+
+if __name__ == '__main__':
+
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+
+    with_zookeeper: WithZooKeeper = WithZooKeeper()
+    _logging.info(with_zookeeper)

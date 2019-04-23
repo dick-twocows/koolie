@@ -16,7 +16,7 @@ class NodeWatch(koolie.tools.service.SleepService):
 
         self.__kwargs = kwargs
 
-        self.__zoo_keeper = koolie.zookeeper_api.using_kazoo.ZooKeeper(**kwargs)
+        self.__zoo_keeper = koolie.zookeeper_api.using_kazoo.KoolieZooKeeper(**kwargs)
 
     def zoo_keeper(self):
         return self.__zoo_keeper

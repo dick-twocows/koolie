@@ -54,7 +54,7 @@ def pod_push(**kwargs):
 
 
 def zookeeper_test(args):
-    zookeeper = koolie.zookeeper_api.using_kazoo.ZooKeeper(args)
+    zookeeper = koolie.zookeeper_api.using_kazoo.KoolieZooKeeper(args)
     try:
         zookeeper.open()
         zookeeper.close()

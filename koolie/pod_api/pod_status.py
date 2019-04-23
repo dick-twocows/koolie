@@ -50,7 +50,7 @@ class PushStatus(koolie.tools.service.SleepService):
 
         self.__kwargs = kwargs
 
-        self.__zoo_keeper = koolie.zookeeper_api.using_kazoo.ZooKeeper(**kwargs)
+        self.__zoo_keeper = koolie.zookeeper_api.using_kazoo.KoolieZooKeeper(**kwargs)
 
         self.__path = '/koolie/pods/{}'.format(kwargs.get('k8s_pod_name', str(uuid.uuid4())))
 
