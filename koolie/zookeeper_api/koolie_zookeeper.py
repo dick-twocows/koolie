@@ -13,7 +13,7 @@ from kazoo.exceptions import KazooException
 _logging = logging.getLogger(__name__)
 
 ZOOKEEPER_HOSTS: str = 'ZOOKEEPER_HOSTS'
-ZOOKEEPER_LOCALHOST: str = 'localhost:2181'
+ZOOKEEPER_LOCALHOST: str = '127.0.0.1:2181'
 ZOOKEEPER_HOSTS_DEFAULT: str = 'zookeeper.default.svc.cluster.local'
 ZOOKEEPER_NODE_PATH: str = 'ZOOKEEPER_NODE_PATH'
 ZOOKEEPER_NODE_PATH_DEFAULT: str = '/'
