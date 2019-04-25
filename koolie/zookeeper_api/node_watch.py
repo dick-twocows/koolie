@@ -3,7 +3,7 @@ import yaml
 import kazoo.protocol.states
 import koolie.tools.service
 
-import koolie.zookeeper_api.using_kazoo
+import koolie.zookeeper_api.koolie_zookeeper
 
 
 _logging = logging.getLogger(__name__)
@@ -16,7 +16,7 @@ class NodeWatch(koolie.tools.service.SleepService):
 
         self.__kwargs = kwargs
 
-        self.__zoo_keeper = koolie.zookeeper_api.using_kazoo.KoolieZooKeeper(**kwargs)
+        self.__zoo_keeper = koolie.zookeeper_api.koolie_zookeeper.UsingKazoo(**kwargs)
 
     def zoo_keeper(self):
         return self.__zoo_keeper
@@ -26,7 +26,7 @@ class NodeWatch(koolie.tools.service.SleepService):
 
     def start(self):
         _logging.debug('start()')
-        self.__zoo_keeper.open()
+        self.__zoo_keeper.start()
         try:
             @self.__zoo_keeper.kazoo_client.ChildrenWatch(self.zookeeper_node_path())
             def watch_children(children):
@@ -37,7 +37,7 @@ class NodeWatch(koolie.tools.service.SleepService):
         except Exception as exception:
             _logging.warning('Exception [{}]'.format(exception))
         finally:
-            self.__zoo_keeper.close()
+            self.__zoo_keeper.stop()
 
     def stop(self):
         _logging.debug('stop()')

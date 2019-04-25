@@ -2,7 +2,7 @@ import argparse
 import koolie.pod_api.pod_status
 import koolie.nginx.zookeeper
 import koolie.version
-import koolie.zookeeper_api.using_kazoo
+import koolie.zookeeper_api.koolie_zookeeper
 import koolie.zookeeper_api.node_watch
 import logging
 import os
@@ -54,10 +54,10 @@ def pod_push(**kwargs):
 
 
 def zookeeper_test(args):
-    zookeeper = koolie.zookeeper_api.using_kazoo.KoolieZooKeeper(args)
+    zookeeper = koolie.zookeeper_api.koolie_zookeeper.UsingKazoo(args)
     try:
-        zookeeper.open()
-        zookeeper.close()
+        zookeeper.start()
+        zookeeper.stop()
     except Exception as exception:
         _logger.warning('Test failed [{}]'.format(exception))
 

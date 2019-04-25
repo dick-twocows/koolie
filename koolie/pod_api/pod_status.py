@@ -8,7 +8,7 @@ import yaml
 
 import koolie.go
 import koolie.tools.service
-import koolie.zookeeper_api.using_kazoo
+import koolie.zookeeper_api.koolie_zookeeper
 
 _logging = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class PushStatus(koolie.tools.service.SleepService):
 
         self.__kwargs = kwargs
 
-        self.__zoo_keeper = koolie.zookeeper_api.using_kazoo.KoolieZooKeeper(**kwargs)
+        self.__zoo_keeper = koolie.zookeeper_api.koolie_zookeeper.UsingKazoo(**kwargs)
 
         self.__path = '/koolie/pods/{}'.format(kwargs.get('k8s_pod_name', str(uuid.uuid4())))
 
@@ -62,13 +62,13 @@ class PushStatus(koolie.tools.service.SleepService):
 
     def start(self):
         _logging.debug('start()')
-        self.__zoo_keeper.open()
+        self.__zoo_keeper.start()
         try:
             super().start()
         except Exception as exception:
             _logging.warning('Exception [{}]'.format(exception))
         finally:
-            self.__zoo_keeper.close()
+            self.__zoo_keeper.stop()
 
     def stop(self):
         _logging.debug('stop()')
