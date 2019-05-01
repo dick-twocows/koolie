@@ -7,7 +7,7 @@ import uuid
 import yaml
 
 import koolie.go
-import koolie.tools.service
+import koolie.tools.abstractservice
 import koolie.zookeeper_api.koolie_zookeeper
 
 _logging = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def decode_data(data) -> object:
         return None
 
 
-class PushStatus(koolie.tools.service.SleepService):
+class PushStatus(koolie.tools.abstractservice.SleepService):
 
     TYPE = 'pod/status'
     CREATED = 'created'

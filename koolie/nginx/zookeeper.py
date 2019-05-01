@@ -3,12 +3,12 @@ import yaml
 
 import koolie.nginx.config
 import koolie.pod_api.pod_status
-import koolie.zookeeper_api.node_watch
+import koolie.zookeeper_api.koolie_node_watch
 
 _logger = logging.getLogger(__name__)
 
 
-class Consume(koolie.zookeeper_api.node_watch.DeltaNodeWatch):
+class Consume(koolie.zookeeper_api.koolie_node_watch.DeltaNodeWatch):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

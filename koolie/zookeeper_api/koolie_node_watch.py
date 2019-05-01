@@ -1,38 +1,38 @@
+import abc
 import logging
+import sys
 import yaml
 import kazoo.protocol.states
-import koolie.tools.service
+import koolie.tools.abstractservice
 
 import koolie.zookeeper_api.koolie_zookeeper
 
 
 _logging = logging.getLogger(__name__)
 
+KOOLIE_NODE_WATCH_PATH_KEY: str = 'koolie_node_watch_path'
 
-class NodeWatch(koolie.tools.service.SleepService):
+
+class AbstractNodeWatch(koolie.tools.abstractservice.SleepService):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self.__kwargs = kwargs
 
-        self.__zoo_keeper = koolie.zookeeper_api.koolie_zookeeper.UsingKazoo(**kwargs)
+        self.__zoo_keeper: koolie.zookeeper_api.koolie_zookeeper.AbstractKoolieZooKeeper = koolie.zookeeper_api.koolie_zookeeper.UsingKazoo(**kwargs)
 
     def zoo_keeper(self):
         return self.__zoo_keeper
 
     def zookeeper_node_path(self) -> str:
-        return self.__kwargs.get('zookeeper_node_path')
+        return self.__kwargs.get(KOOLIE_NODE_WATCH_PATH_KEY)
 
     def start(self):
         _logging.debug('start()')
         self.__zoo_keeper.start()
         try:
-            @self.__zoo_keeper.kazoo_client.ChildrenWatch(self.zookeeper_node_path())
-            def watch_children(children):
-                self.change(children)
-                return True
-
+            self.__zoo_keeper.watch_children(self.zookeeper_node_path(), self.change)
             super().start()
         except Exception as exception:
             _logging.warning('Exception [{}]'.format(exception))
@@ -47,15 +47,15 @@ class NodeWatch(koolie.tools.service.SleepService):
         _logging.debug('go()')
         super().go()
 
-    # Override in subclasses to do something with the children.
+    @abc.abstractmethod
     def change(self, children):
-        return True
+        pass
 
 
-class DeltaNodeWatch(NodeWatch):
+class DeltaNodeWatch(AbstractNodeWatch):
 
     def __init__(self, **kwargs):
-        NodeWatch.__init__(self, **kwargs)
+        super().__init__(**kwargs)
 
         self.__current = set()
 
@@ -80,7 +80,7 @@ class DeltaNodeWatch(NodeWatch):
 class EchoNodeWatch(DeltaNodeWatch):
 
     def __init__(self, **kwargs):
-        DeltaNodeWatch.__init__(self, **kwargs)
+        super().__init__(**kwargs)
 
     def added(self, children) -> object:
         _logging.info('EchoNodeWatch.added()')
@@ -96,7 +96,7 @@ class EchoNodeWatch(DeltaNodeWatch):
 class YAMLNodeWatch(DeltaNodeWatch):
 
     def __init__(self, args):
-        DeltaNodeWatch.__init__(self, args)
+        super().__init__(args)
         _logging.debug('YAMLNodeWatch.__init__()')
 
     def added(self, children) -> object:
@@ -186,3 +186,10 @@ class StatusTypeWatch(DeltaNodeWatch):
     def removed(self, children) -> object:
         return super().removed(children)
 
+
+if __name__ == '__main__':
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+
+    node_watch: DeltaNodeWatch
+    with EchoNodeWatch(koolie_node_watch_path='/') as node_watch:
+        pass

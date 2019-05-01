@@ -117,6 +117,7 @@ class UsingKazoo(AbstractKoolieZooKeeper):
         _logging.debug('ZooKeeper.close()')
         try:
             self.__open = False
+            children_watch: kazoo.recipe.watchers.ChildrenWatch
             self._kazoo_client.stop()
             self._kazoo_client = None
         except KazooException:
@@ -139,9 +140,7 @@ class UsingKazoo(AbstractKoolieZooKeeper):
         return self._kazoo_client.get_children(path)
 
     def watch_children(self, path: str, func: callable):
-        cw = kazoo.recipe.watchers.ChildrenWatch(self._kazoo_client, path, func)
-        print(cw)
-
+        self._kazoo_client.ChildrenWatch(path, func)
 
     def create_node(self, path, value=b'', acl=None, ephemeral=False, sequence=False, make_path=False):
         _logging.debug('create_node()')
@@ -192,8 +191,7 @@ if __name__ == '__main__':
         _logging.info(koolie_zookeeper.create_uuid_node())
         for child in koolie_zookeeper.get_children('/'):
             _logging.info(child)
-        t = koolie_zookeeper._kazoo_client.transaction()
-        print(t)
+
 
 
 

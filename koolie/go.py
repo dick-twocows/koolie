@@ -3,7 +3,7 @@ import koolie.pod_api.pod_status
 import koolie.nginx.zookeeper
 import koolie.version
 import koolie.zookeeper_api.koolie_zookeeper
-import koolie.zookeeper_api.node_watch
+import koolie.zookeeper_api.koolie_node_watch
 import logging
 import os
 import sys
@@ -70,9 +70,9 @@ def zookeeper_watch(**kwargs):
     add = dict()
     add[koolie.pod_api.pod_status.STATUS_TYPE] = pod_status
 
-    kwargs[koolie.zookeeper_api.node_watch.StatusTypeWatch.ADD] = add
+    kwargs[koolie.zookeeper_api.koolie_node_watch.StatusTypeWatch.ADD] = add
 
-    watch = koolie.zookeeper_api.node_watch.StatusTypeWatch(**kwargs)
+    watch = koolie.zookeeper_api.koolie_node_watch.StatusTypeWatch(**kwargs)
     try:
         try:
             watch.start()
