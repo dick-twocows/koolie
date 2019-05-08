@@ -3,61 +3,64 @@ import logging
 import sys
 import yaml
 import kazoo.protocol.states
-import koolie.tools.abstractservice
+import koolie.tools.abstract_service
 
 import koolie.zookeeper_api.koolie_zookeeper
 
 
 _logging = logging.getLogger(__name__)
 
-KOOLIE_NODE_WATCH_PATH_KEY: str = 'koolie_node_watch_path'
+KOOLIE_NODE_WATCH_PATH: str = 'koolie_node_watch_path'
 
 
-class AbstractNodeWatch(koolie.tools.abstractservice.SleepService):
+class AbstractNodeWatch(koolie.tools.abstract_service.SleepService):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.__kwargs = kwargs
-
         self.__zoo_keeper: koolie.zookeeper_api.koolie_zookeeper.AbstractKoolieZooKeeper = koolie.zookeeper_api.koolie_zookeeper.UsingKazoo(**kwargs)
+
+        self.__change_count = 0;
 
     def zoo_keeper(self):
         return self.__zoo_keeper
 
     def zookeeper_node_path(self) -> str:
-        return self.__kwargs.get(KOOLIE_NODE_WATCH_PATH_KEY)
+        return self.getKV(KOOLIE_NODE_WATCH_PATH)
 
-    def start(self):
+    def before_start(self):
         _logging.debug('start()')
         self.__zoo_keeper.start()
         try:
             self.__zoo_keeper.watch_children(self.zookeeper_node_path(), self.change)
-            super().start()
         except Exception as exception:
             _logging.warning('Exception [{}]'.format(exception))
-        finally:
+
+    def before_stop(self):
+        try:
             self.__zoo_keeper.stop()
-
-    def stop(self):
-        _logging.debug('stop()')
-        super().stop()
-
-    def go(self):
-        _logging.debug('go()')
-        super().go()
+        except Exception as exception:
+            _logging.warning('Exception [{}]'.format(exception))
 
     @abc.abstractmethod
     def change(self, children):
-        pass
+        """SubClasses need to override this method and do something.
+        By default it increments change count by 1."""
+        self.__change_count += 1
 
 
 class DeltaNodeWatch(AbstractNodeWatch):
+
+    """ZooKeeper node watch that performs a delta when changes occur using added() and removed().
+    The delta is calculated based on the current nodes."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
         self.__current = set()
+
+        self._added = 0
+        self._removed = 0
 
     def current(self) -> set:
         return self.__current
@@ -68,16 +71,20 @@ class DeltaNodeWatch(AbstractNodeWatch):
         self.removed(self.__current.difference(new))
         self.added(new.difference(self.__current))
         self.__current = new
-        return True
+        super().change(children)
 
     def added(self, children) -> object:
         _logging.debug('added()')
+        self._added += len(children)
 
     def removed(self, children) -> object:
         _logging.debug('removed()')
+        self._removed += len(children)
 
 
 class EchoNodeWatch(DeltaNodeWatch):
+
+    """ZooKeeper node watch that echos changes."""
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -190,6 +197,5 @@ class StatusTypeWatch(DeltaNodeWatch):
 if __name__ == '__main__':
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
-    node_watch: DeltaNodeWatch
-    with EchoNodeWatch(koolie_node_watch_path='/') as node_watch:
-        pass
+    echo_node_watch = EchoNodeWatch(koolie_node_watch_path='/')
+    echo_node_watch.start()

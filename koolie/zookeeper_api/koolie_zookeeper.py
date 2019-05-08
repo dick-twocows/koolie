@@ -9,6 +9,8 @@ import kazoo.recipe.watchers
 from kazoo.client import KazooClient
 from kazoo.exceptions import KazooException
 
+import koolie.tools.abstract_service
+
 
 _logging = logging.getLogger(__name__)
 
@@ -19,7 +21,7 @@ ZOOKEEPER_NODE_PATH: str = 'ZOOKEEPER_NODE_PATH'
 ZOOKEEPER_NODE_PATH_DEFAULT: str = '/'
 
 
-class AbstractKoolieZooKeeper(contextlib.AbstractContextManager):
+class AbstractKoolieZooKeeper(koolie.tools.abstract_service.AbstractService):
 
     """An abstract class for accessing ZooKeeper
     Based on Kazoo because that's what was used first..."""
@@ -39,14 +41,6 @@ class AbstractKoolieZooKeeper(contextlib.AbstractContextManager):
     def hosts(self) -> str:
         """Convenience method to return the hosts from `_kwargs`"""
         return self._kwargs.get(ZOOKEEPER_HOSTS, ZOOKEEPER_LOCALHOST)
-
-    @abc.abstractmethod
-    def start(self):
-        pass
-
-    @abc.abstractmethod
-    def stop(self):
-        pass
 
     @abc.abstractmethod
     def get_node_value(self, path: str) -> bytes:
@@ -102,22 +96,15 @@ class UsingKazoo(AbstractKoolieZooKeeper):
     def kazoo_client(self):
         return self._kazoo_client
 
-    def start(self) -> bool:
-        _logging.debug('ZooKeeper.open()')
+    def before_start(self):
         try:
             self._kazoo_client = KazooClient(hosts=self.hosts())
             self._kazoo_client.start(timeout=5)
-            self.__open = True
         except KazooException as exception:
-            _logging.warning('Failed to open [{}] [{}]'.format(sys.exc_info()[0], exception))
-            self.__open = False
-        return self.__open
+            _logging.warning('Failed to start [{}] [{}]'.format(sys.exc_info()[0], exception))
 
-    def stop(self):
-        _logging.debug('ZooKeeper.close()')
+    def before_stop(self):
         try:
-            self.__open = False
-            children_watch: kazoo.recipe.watchers.ChildrenWatch
             self._kazoo_client.stop()
             self._kazoo_client = None
         except KazooException:
