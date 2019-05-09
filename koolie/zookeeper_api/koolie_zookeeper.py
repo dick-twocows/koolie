@@ -30,14 +30,6 @@ class AbstractKoolieZooKeeper(koolie.tools.abstract_service.AbstractService):
         super().__init__()
         self._kwargs = kwargs
 
-    def __enter__(self):
-        self.start()
-        return super().__enter__()
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.stop()
-        pass
-
     def hosts(self) -> str:
         """Convenience method to return the hosts from `_kwargs`"""
         return self._kwargs.get(ZOOKEEPER_HOSTS, ZOOKEEPER_LOCALHOST)
@@ -88,8 +80,6 @@ class UsingKazoo(AbstractKoolieZooKeeper):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        self.__open: bool = False
-
         self._kazoo_client: KazooClient = None
 
     @property
@@ -101,14 +91,16 @@ class UsingKazoo(AbstractKoolieZooKeeper):
             self._kazoo_client = KazooClient(hosts=self.hosts())
             self._kazoo_client.start(timeout=5)
         except KazooException as exception:
-            _logging.warning('Failed to start [{}] [{}]'.format(sys.exc_info()[0], exception))
+            _logging.warning('Failed to start Kazoo [{}] [{}]'.format(sys.exc_info()[0], exception))
+            self._kazoo_client = None
 
     def before_stop(self):
         try:
             self._kazoo_client.stop()
+        except KazooException as exception:
+            _logging.warning('Failed to stop Kazoo [{}] [{}].'.format(sys.exc_info()[0], exception))
+        finally:
             self._kazoo_client = None
-        except KazooException:
-            _logging.warning('Failed to close [{}]'.format(sys.exc_info()[0]))
 
     def get_node_value(self, path) -> bytes:
         try:
@@ -158,7 +150,7 @@ class WithZooKeeper(object):
 
 if __name__ == '__main__':
 
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
     koolie_zookeeper: AbstractKoolieZooKeeper
     with UsingKazoo(ZOOKEEPER_HOSTS=ZOOKEEPER_LOCALHOST) as koolie_zookeeper:

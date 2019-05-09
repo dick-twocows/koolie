@@ -46,6 +46,7 @@ def remove_sig_handles(name: str):
 
 
 def go_sig_handle(signum: int, frame):
+    _logger.info('{}.'.format(signal.Signals(signum).name))
     with _sig_rlock:
         stack = traceback.extract_stack(frame)
         _logger.debug(stack)
@@ -70,7 +71,7 @@ class ServiceState(enum.Enum):
 class AbstractService(contextlib.AbstractContextManager):
 
     """Abstract service class which provides start() and stop() methods.
-    Work is performed in the go() method which started in its own thread."""
+    Work is performed in the go() method which is started in its own thread."""
 
     NAME: str = 'abstract_service_name'
 
@@ -79,7 +80,7 @@ class AbstractService(contextlib.AbstractContextManager):
 
         self._kwargs = kwargs
 
-        self.__name = self.getKV(self.NAME)
+        self.__name = self.get_kv(self.NAME)
         if self.__name is None:
             self.__name = str(uuid.uuid4())
 
@@ -100,6 +101,8 @@ class AbstractService(contextlib.AbstractContextManager):
 
         _logger.info('Created [{}].'.format(self))
 
+    # Signal handler methods.
+
     def _signal_handlers(self) -> typing.Mapping[int, Handle]:
         return self.signal_handlers
 
@@ -107,7 +110,7 @@ class AbstractService(contextlib.AbstractContextManager):
         self.restart()
 
     def _sig_info(self, signum):
-        _logger.info('SIGINFO')
+        _logger.info(self)
 
     def _sig_int(self, signum):
         self.stop()
@@ -116,10 +119,12 @@ class AbstractService(contextlib.AbstractContextManager):
         self.stop()
 
     def _sig_usr1(self, signum):
-        _logger.info('SIGUSR1\n{}'.format(self))
+        _logger.info(self)
 
     def _sig_usr2(self, signum):
-        _logger.warning('SIGUSR2 undefined for [{}].'.format(self.name()))
+        _logger.info(self)
+
+    # ConextManager methods i.e. with.
 
     def __enter__(self):
         self.start()
@@ -128,10 +133,10 @@ class AbstractService(contextlib.AbstractContextManager):
     def __exit__(self, exc_type, exc_value, traceback):
         self.stop()
 
-    def getKV(self, k: str, v: object = None) -> object:
+    def get_kv(self, k: str, v: object = None) -> object:
         return self._kwargs.get(k, v)
 
-    def hasK(self, k: str) -> bool:
+    def has_k(self, k: str) -> bool:
         return k in self._kwargs.keys()
 
     def name(self) -> str:
@@ -213,7 +218,7 @@ class AbstractService(contextlib.AbstractContextManager):
         _logger.debug('Go  [{}].'.format(self.name()))
 
     def __str__(self) -> str:
-        return '[{}] [{}/{}]'.format(self.name(), self.state(), self.pending_state())
+        return '[{}] [{}/{}] [{}]'.format(self.name(), self.state(), self.pending_state(), os.getpid())
 
 
 class SleepService(AbstractService):
@@ -221,18 +226,41 @@ class SleepService(AbstractService):
     SLEEP_INTERVAL = 'sleep_interval'
     SLEEP_INTERVAL_DEFAULT = 1
 
+    WAKE_INTERVAL = 'wake_interval'
+    WAKE_INTERVAL_DEFAULT = 10
+
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-        self.__interval: int = self.getKV(self.SLEEP_INTERVAL, self.SLEEP_INTERVAL_DEFAULT)
+        self.__sleep_interval: int = self.get_kv(self.SLEEP_INTERVAL, self.SLEEP_INTERVAL_DEFAULT)
+        self.__wake_interval: int = self.get_kv(self.WAKE_INTERVAL, self.WAKE_INTERVAL_DEFAULT)
 
-    def interval(self) -> int:
-        return self.__interval
+        self.__wake_count: int = 0
+
+    def sleep_interval(self) -> int:
+        return self.__sleep_interval
+
+    def wake_interval(self) -> int:
+        return self.__wake_interval
 
     def go(self):
+        """Alternate between calling wake() and sleep()."""
+        sleep_interval = self.sleep_interval()
+        wake_interval = self.wake_interval()
         while self.state() is ServiceState.STARTED and self.pending_state() is not ServiceState.STOPPED:
-            time.sleep(self.interval())
-        _logger.debug('Returning from go.')
+            try:
+                wake_interval -= sleep_interval
+                if wake_interval <= 0:
+                    wake_interval = self.wake_interval()
+                    self.wake()
+                time.sleep(sleep_interval)
+            except Exception as exception:
+                _logger.warning('Exception in go() [{}].'.format(exception))
+
+    def wake(self):
+        """Called from go() after sleeping, override to do something every interval."""
+        self.__wake_count += 1
+        pass
 
 
 if __name__ == '__main__':

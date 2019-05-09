@@ -26,7 +26,7 @@ class AbstractNodeWatch(koolie.tools.abstract_service.SleepService):
         return self.__zoo_keeper
 
     def zookeeper_node_path(self) -> str:
-        return self.getKV(KOOLIE_NODE_WATCH_PATH)
+        return self.get_kv(KOOLIE_NODE_WATCH_PATH)
 
     def before_start(self):
         _logging.debug('start()')
@@ -195,7 +195,7 @@ class StatusTypeWatch(DeltaNodeWatch):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-    echo_node_watch = EchoNodeWatch(koolie_node_watch_path='/')
+    echo_node_watch = EchoNodeWatch(koolie_node_watch_path='/koolie/pods/')
     echo_node_watch.start()

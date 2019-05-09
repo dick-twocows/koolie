@@ -9,7 +9,6 @@ import os
 import sys
 import time
 
-logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 _logger = logging.getLogger(__name__)
 
 # Koolie variables.

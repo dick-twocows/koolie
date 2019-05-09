@@ -4,9 +4,9 @@ FROM python:3.7.0-slim-stretch
 RUN pip install --upgrade pip
 
 # Install libraries.
-RUN pip install kazoo==2.5.0
-RUN pip install slackclient==1.0.0
-RUN pip install PyYAML==3.13
+RUN pip install kazoo
+RUN pip install slackclient
+RUN pip install PyYAML
 
 COPY . /
 
