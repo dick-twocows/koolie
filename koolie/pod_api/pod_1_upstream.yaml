@@ -4,4 +4,4 @@
   server: "default"
   loadPolicy: "append"
   config: |
-    server ${os_environ_hostname};
+    server ${os_environ_hostname}/p1;

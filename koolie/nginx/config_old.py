@@ -4,7 +4,7 @@ import typing
 import koolie.tools.common
 import yaml
 
-import koolie.config.item
+import koolie.config.items
 
 _logger = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ TOKEN_ADD_TYPE = 'token_add'
 VALUE_KEY = 'value'
 
 
-class NGINX(koolie.config.item.Item):
+class NGINX(koolie.config.items.Item):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -171,8 +171,8 @@ class Affix(NGINX):
 DEFAULT_SERVER_PREFIX = [
     Affix(
         {
-            koolie.config.item.TYPE_KEY: NGINX_SERVER_PREFIX_TYPE,
-            koolie.config.item.NAME_KEY: 'default',
+            koolie.config.items.TYPE_KEY: NGINX_SERVER_PREFIX_TYPE,
+            koolie.config.items.NAME_KEY: 'default',
             CONFIG_KEY: 'server ${nginx_server_prefix__name} {{\n'
         }
     )
@@ -181,8 +181,8 @@ DEFAULT_SERVER_PREFIX = [
 DEFAULT_SERVER_SUFFIX = [
     Affix(
         {
-            koolie.config.item.TYPE_KEY: NGINX_SERVER_SUFFIX_TYPE,
-            koolie.config.item.NAME_KEY: 'default',
+            koolie.config.items.TYPE_KEY: NGINX_SERVER_SUFFIX_TYPE,
+            koolie.config.items.NAME_KEY: 'default',
             CONFIG_KEY: '}\n'
         }
     )
@@ -192,8 +192,8 @@ DEFAULT_SERVER_SUFFIX = [
 DEFAULT_LOCATION_PREFIX = [
     Affix(
         {
-            koolie.config.item.TYPE_KEY: NGINX_LOCATION_PREFIX_TYPE,
-            koolie.config.item.NAME_KEY: 'default',
+            koolie.config.items.TYPE_KEY: NGINX_LOCATION_PREFIX_TYPE,
+            koolie.config.items.NAME_KEY: 'default',
             CONFIG_KEY: 'location ${nginx_location__match_modifier} ${nginx_location__location_match} {{\n'
         }
     )
@@ -202,8 +202,8 @@ DEFAULT_LOCATION_PREFIX = [
 DEFAULT_LOCATION_SUFFIX = [
     Affix(
         {
-            koolie.config.item.TYPE_KEY: NGINX_LOCATION_SUFFIX_TYPE,
-            koolie.config.item.NAME_KEY: 'default',
+            koolie.config.items.TYPE_KEY: NGINX_LOCATION_SUFFIX_TYPE,
+            koolie.config.items.NAME_KEY: 'default',
             CONFIG_KEY: '}\n'
         }
     )
@@ -213,8 +213,8 @@ DEFAULT_LOCATION_SUFFIX = [
 DEFAULT_UPSTREAM_PREFIX = [
     Affix(
         {
-            koolie.config.item.TYPE_KEY: NGINX_UPSTREAM_PREFIX_TYPE,
-            koolie.config.item.NAME_KEY: '_default',
+            koolie.config.items.TYPE_KEY: NGINX_UPSTREAM_PREFIX_TYPE,
+            koolie.config.items.NAME_KEY: '_default',
             CONFIG_KEY: 'upstream ${nginx_upstream__name} {\n'
         }
     )
@@ -223,8 +223,8 @@ DEFAULT_UPSTREAM_PREFIX = [
 DEFAULT_UPSTREAM_SUFFIX = [
     Affix(
         {
-            koolie.config.item.TYPE_KEY: NGINX_UPSTREAM_SUFFIX_TYPE,
-            koolie.config.item.NAME_KEY: '_default',
+            koolie.config.items.TYPE_KEY: NGINX_UPSTREAM_SUFFIX_TYPE,
+            koolie.config.items.NAME_KEY: '_default',
             CONFIG_KEY: '}\n'
         }
     )
@@ -249,7 +249,7 @@ class Upstream(NGINX):
         super().__init__(**kwargs)
 
 
-class LoadConfig(koolie.config.item.Load):
+class LoadConfig(koolie.config.items.Load):
 
     def __init__(self) -> None:
         super().__init__()

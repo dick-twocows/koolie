@@ -1,11 +1,11 @@
-import koolie.config.item
+import koolie.config.items
 
 
 if __name__ == '__main__':
 
-    load = koolie.config.item.Load()
+    load = koolie.config.items.Load()
 
-    load.load('test_base.yaml')
+    load.load('single_item.yaml')
 
     print(load.items())
 

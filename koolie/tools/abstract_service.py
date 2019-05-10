@@ -99,8 +99,6 @@ class AbstractService(contextlib.AbstractContextManager):
             signal.SIGUSR2: self._sig_usr2
         }
 
-        _logger.info('Created [{}].'.format(self))
-
     # Signal handler methods.
 
     def _signal_handlers(self) -> typing.Mapping[int, Handle]:
@@ -218,7 +216,7 @@ class AbstractService(contextlib.AbstractContextManager):
         _logger.debug('Go  [{}].'.format(self.name()))
 
     def __str__(self) -> str:
-        return '[{}] [{}/{}] [{}]'.format(self.name(), self.state(), self.pending_state(), os.getpid())
+        return 'Name [{}] State [{}/{}] PID [{}]'.format(self.name(), self.state(), self.pending_state(), os.getpid())
 
 
 class SleepService(AbstractService):
@@ -246,7 +244,7 @@ class SleepService(AbstractService):
     def go(self):
         """Alternate between calling wake() and sleep()."""
         sleep_interval = self.sleep_interval()
-        wake_interval = self.wake_interval()
+        wake_interval = 0  # Causes the wake() call to be made when we enter the while loop.
         while self.state() is ServiceState.STARTED and self.pending_state() is not ServiceState.STOPPED:
             try:
                 wake_interval -= sleep_interval
@@ -261,6 +259,9 @@ class SleepService(AbstractService):
         """Called from go() after sleeping, override to do something every interval."""
         self.__wake_count += 1
         pass
+
+    def __str__(self) -> str:
+        return '{}\nSleep [{}] Wake [{}]'.format(super().__str__(), self.sleep_interval(), self.wake_interval())
 
 
 if __name__ == '__main__':

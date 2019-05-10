@@ -3,12 +3,12 @@ import logging
 import sys
 import typing
 
-import koolie.config.item
+import koolie.config.items
 
 _logger = logging.getLogger(__name__)
 
 
-class Item(koolie.config.item.Item):
+class Item(koolie.config.items.Item):
 
     CONFIG_KEY = 'config'
 
@@ -61,7 +61,7 @@ class Location(Item):
         return self.data().get(Location.LOCATION_MATCH_KEY)
 
 
-class Load(koolie.config.item.Load):
+class Load(koolie.config.items.Load):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -75,7 +75,7 @@ class Load(koolie.config.item.Load):
         )
 
 
-class Dump(koolie.config.item.Dump):
+class Dump(koolie.config.items.Dump):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)

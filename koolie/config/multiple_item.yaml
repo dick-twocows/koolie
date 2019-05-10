@@ -1,0 +1,7 @@
+- type: "koolie_token"
+  name: "planet 1"
+  value: "mars"
+- type: "koolie_token"
+  name: "planet 2"
+  value: "venus"
+

@@ -3,8 +3,10 @@ import logging
 import string
 import sys
 import time
+import typing
 import yaml
 
+import koolie.config.items
 import koolie.tools.abstract_service
 import koolie.tools.common
 import koolie.zookeeper_api.koolie_zookeeper
@@ -38,6 +40,22 @@ def decode_data(data) -> object:
         return None
 
 
+class KooliePodStatus(koolie.config.items.Item):
+
+    TYPE_KEY = 'pod/status'
+    CREATED_KEY = 'created'
+    MODIFIED_KEY = 'modified'
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def pod_status_created(self) -> float:
+        return self.data().get(self.CREATED_KEY)
+
+    def pod_status_modified(self) -> float:
+        return self.data().get(self.MODIFIED_KEY)
+
+
 class PushStatus(koolie.tools.abstract_service.SleepService):
 
     TYPE = 'pod/status'
@@ -55,34 +73,35 @@ class PushStatus(koolie.tools.abstract_service.SleepService):
 
         self.__path = '/koolie/pods/{}'.format(kwargs.get('k8s_pod_name', self.name()))
 
-        self.__data = None
+        # The data sent to the Zookeeper ephemeral node.
+        self.__data: typing.List[..., ...] = list()
 
+        # The Pod status, effectively a
         self.__status = None
 
+        #
         self.__config_files = None
 
-        _logger.info('[{}] pushing status to [{}].'.format(self.name(), self.__path))
+        self.__items = koolie.config.items.ReadItems()
 
     def before_start(self):
         try:
             self.__zoo_keeper.start()
+            self.__items.read(item_files=self.get_kv('item_files', ''))
+            self.__data = self.create_status()
+            self.__zoo_keeper.create_ephemeral_node(self.__path, encode_data(self.__data))
             super().before_start()
         except Exception as exception:
-            _logger.warning('Exception [{}]'.format(exception))
+            koolie.tools.common.log_exception(exception, logger=_logger)
 
     def before_stop(self):
         self.__zoo_keeper.stop()
         super().before_stop()
 
     def wake(self):
-        _logger.info('wake()')
         try:
-            if self.__data is None:
-                self.__data = self.create_status()
-                self.__zoo_keeper.create_ephemeral_node(self.__path, encode_data(self.__data))
-            else:
-                self.__data = self.update_status()
-                self.__zoo_keeper.set_node_value(self.__path, encode_data(self.__data))
+            self.__data = self.update_status()
+            self.__zoo_keeper.set_node_value(self.__path, encode_data(self.__data))
         except Exception as exception:
             koolie.tools.common.log_exception(exception, logger=_logger)
         finally:
@@ -135,9 +154,10 @@ class PushStatus(koolie.tools.abstract_service.SleepService):
         return data
 
     def update_status(self) -> dict:
-        _logger.debug('update()')
+        """Update the status.
+        Set the MODIFIED value to timestamp."""
+        _logger.debug('update_status()')
         self.__status[PushStatus.MODIFIED] = time.time()
-        _logger.debug('Data [{}]'.format(self.__data))
         return self.__data
 
     def substitute(self, data):

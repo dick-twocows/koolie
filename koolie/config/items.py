@@ -9,6 +9,8 @@ import koolie.tools.common
 _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.DEBUG)
 
+Items_List = typing.List[typing.Any]
+
 
 class Item(abc.ABC):
 
@@ -67,6 +69,51 @@ class Token(Item):
 
     def value(self) -> object:
         return self.data().get(Token.VALUE_KEY)
+
+
+class Items(object):
+
+    ITEM_FILES_KEY: 'item_files'
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__()
+
+        self._kwargs = kwargs
+
+        self._items: Items_List = list()
+
+    def get_kwargs(self) -> typing.Dict[str, typing.Any]:
+        return self._kwargs
+
+    def get_items(self) -> Items_List:
+        return self._items
+
+    def clear_items(self) -> Items_List:
+        self._items.clear()
+        return self._items
+
+
+class ReadItems(Items):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+    def read(self, *args: typing.List[typing.Union[str]]):
+        """Read the given list of files as YAML and append to __data."""
+        _logger.debug('read()')
+        for name in args:
+            try:
+                assert isinstance(name, str)
+                with open(file=name, mode='r') as file:
+                    raw = file.read()
+                items = yaml.load(raw)
+                # If its not a list...
+                assert isinstance(items, typing.List)
+                _logger.debug('Read [{}] items.'.format(len(items)))
+                for item in items:
+                    self._items.append(item)
+            except Exception as exception:
+                koolie.tools.common.log_exception(exception, logger=_logger)
 
 
 class Load(object):
