@@ -1,3 +1,7 @@
+"""
+Classes to handle config as an Item or subclass thereof.
+"""
+
 import abc
 import logging
 import re
@@ -9,7 +13,11 @@ import koolie.tools.common
 _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.DEBUG)
 
-Items_List = typing.List[typing.Any]
+# Raw item type.
+Raw_Item_Type = typing.Dict[str, typing.Any]
+
+# Raw items type.
+Raw_Items_Type = typing.List['Item']
 
 
 class Item(abc.ABC):
@@ -73,23 +81,40 @@ class Token(Item):
 
 class Items(object):
 
-    ITEM_FILES_KEY: 'item_files'
+    """Base class for items."""
 
     def __init__(self, **kwargs) -> None:
         super().__init__()
 
+        # The kwargs given at creation.
         self._kwargs = kwargs
 
-        self._items: Items_List = list()
+        # The list of Items, which may or may not contain duplicates.
+        self._items: Raw_Items_Type = list()
 
     def get_kwargs(self) -> typing.Dict[str, typing.Any]:
         return self._kwargs
 
-    def get_items(self) -> Items_List:
+    def get_items(self, fqn: str = None) -> Raw_Items_Type:
+        """Return the raw items.
+        If fqn is not None return a subset which matches the given fqn."""
+        if fqn is None:
+            return self._items
+        subset: Raw_Items_Type = list()
+        for raw_item in self._items:
+            if raw_item.fqn() == fqn:
+                subset.append(raw_item)
+        return subset
+
+    def clear_items(self) -> Raw_Items_Type:
+        self._items.clear()
         return self._items
 
-    def clear_items(self) -> Items_List:
-        self._items.clear()
+    def add_item(self, item: typing.Union[Item, Raw_Item_Type]) -> Raw_Items_Type:
+        if isinstance(item, dict):
+            item = Item(**item)
+        assert isinstance(item, Item)
+        self._items.append(item)
         return self._items
 
 
@@ -106,7 +131,7 @@ class ReadItems(Items):
                 assert isinstance(name, str)
                 with open(file=name, mode='r') as file:
                     raw = file.read()
-                items = yaml.load(raw)
+                items = yaml.safe_load(raw)
                 # If its not a list...
                 assert isinstance(items, typing.List)
                 _logger.debug('Read [{}] items.'.format(len(items)))

@@ -8,6 +8,10 @@ _logger = logging.getLogger(__name__)
 
 class TestLoad(unittest.TestCase):
 
+    def test_items(self):
+        items = koolie.config.items.Items()
+        items.add_item({'type': 'foo'})
+
     def test_single_read(self):
         items = koolie.config.items.ReadItems()
         items.read('single_item.yaml')
