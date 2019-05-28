@@ -254,7 +254,7 @@ class LoadConfig(koolie.config.items.Load):
     def __init__(self) -> None:
         super().__init__()
 
-        self.creators().update(
+        self.get_creators().update(
             NGINX_SERVER_TYPE=Server
         )
 

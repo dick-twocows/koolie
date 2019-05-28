@@ -30,7 +30,7 @@ def default(name, value) -> str:
 
 
 def suffix_help(args):
-    parser.parse_args(args.help_prefix.split().append('--help'))
+    parser.parse_args(args.help_prefix.split().load_item_append('--help'))
 
 
 def sleep(args):

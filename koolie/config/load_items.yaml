@@ -1,0 +1,12 @@
+# Planets: Mercury , Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune"
+
+- type: "koolie_token"
+  name: "planets"
+  load: "APPEND"
+  value: "Mercury"
+
+- type: "koolie_token"
+  name: "planets"
+  load: "APPEND"
+  value: "Venus"
+

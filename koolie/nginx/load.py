@@ -161,7 +161,7 @@ class Load(object):
     def load_server_unique(self, server: koolie.nginx.config_old.Server):
         _logger.debug('load_server_unique()')
         try:
-            assert server.fqn() not in self.config().servers().keys()
+            assert server.fqn() not in self.config().servers().get_fqns()
             self.config().servers()[server.fqn()] = [server]
             self.load_success()
         except Exception as exception:
@@ -192,7 +192,7 @@ class Load(object):
         self.config().locations()[self.location_fqn(location)] = [location]
 
     def load_location_append(self, location: dict):
-        self.config().locations().setdefault(self.location_fqn(location), []).append(location)
+        self.config().locations().setdefault(self.location_fqn(location), []).load_item_append(location)
 
     def load_location(self, location: dict):
         _logger.debug('load_location()')

@@ -66,7 +66,7 @@ class Load(koolie.config.items.Load):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-        self.creators().update(
+        self.get_creators().update(
             {
                 Root.ROOT_TYPE: Root,
                 Server.SERVER_TYPE: Server,

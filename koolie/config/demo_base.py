@@ -9,7 +9,7 @@ if __name__ == '__main__':
 
     print(load.items())
 
-    print(load.keys())
+    print(load.get_fqns())
 
     base = next(iter(load.items()))
     print(type(base))

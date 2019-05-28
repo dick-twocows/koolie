@@ -98,7 +98,7 @@ class Dump(object):
     def dump_servers(self):
         _logger.debug('dump_servers()')
         try:
-            for server in self.config().servers().keys():
+            for server in self.config().servers().get_fqns():
                 print(server)
                 directory_name = '{}servers/'.format(self.config().nginx_directory())
                 koolie.tools.common.ensure_directory(directory_name)
@@ -115,7 +115,7 @@ class Dump(object):
     def dump_locations(self):
         _logger.debug('dump_locations()')
         try:
-            for location in self.config().locations().keys():
+            for location in self.config().locations().get_fqns():
                 print(location)
                 print(self.config().locations()[location][0])
 
