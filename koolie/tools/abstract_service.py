@@ -2,6 +2,7 @@ import contextlib
 import enum
 import logging
 import os
+import queue
 import signal
 import sys
 import time
@@ -160,6 +161,13 @@ class AbstractService(contextlib.AbstractContextManager):
         with self.__rlock:
             self.__pending_state = pending_state
 
+    def duration(self, duration):
+        """Run the service for the given duration."""
+        _logger.info('Duration [{}] [{}].'.format(self.name(), duration))
+        self.start()
+        time.sleep(duration)
+        self.stop()
+
     def restart(self):
         """Restart the service."""
         _logger.info('Restart [{}].'.format(self.name()))
@@ -213,7 +221,7 @@ class AbstractService(contextlib.AbstractContextManager):
         pass
 
     def go(self):
-        _logger.debug('Go  [{}].'.format(self.name()))
+        pass
 
     def __str__(self) -> str:
         return 'Name [{}] State [{}/{}] PID [{}]'.format(self.name(), self.state(), self.pending_state(), os.getpid())
@@ -264,10 +272,68 @@ class SleepService(AbstractService):
         return '{}\nSleep [{}] Wake [{}]'.format(super().__str__(), self.sleep_interval(), self.wake_interval())
 
 
+class QueueService(AbstractService):
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+        self._queue: queue.Queue = None
+
+        self._producer_thread: threading.Thread = None
+
+    def go(self):
+        _logger.debug('go()')
+        self._queue = queue.Queue()
+        self._producer_thread = threading.Thread(group=None, target=self.producer)
+        self._producer_thread.start()
+        while self.state() is ServiceState.STARTED and self.pending_state() is not ServiceState.STOPPED:
+            try:
+                item = self._queue.get(block=True, timeout=1)
+                self.item(item)
+                self._queue.task_done()
+            except queue.Empty as empty:
+                # _logger.debug('empty')
+                pass
+        _logger.debug('go() END')
+
+    def producer(self):
+        pass
+
+    def item(self, item):
+        pass
+
+
+def test_queue_service():
+    class Add(QueueService):
+
+        def __init__(self, **kwargs) -> None:
+            super().__init__(**kwargs)
+
+        def producer(self):
+            _logger.debug('producer()')
+            i = 0
+            while self.state() is ServiceState.STARTED and self.pending_state() is not ServiceState.STOPPED:
+                i += 1
+                _logger.debug('put() {}'.format(i))
+                self._queue.put(i)
+                time.sleep(1)
+
+        def item(self, item):
+            _logger.debug('item()')
+            print(item)
+
+    add = Add(wake_interval=1)
+    add.start()
+    time.sleep(10)
+    add.stop()
+
+
 if __name__ == '__main__':
     logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
 
     _logger.info('PID is [{}].'.format(os.getpid()))
+
+    test_queue_service()
 
     # with AbstractService():
     #     pass
@@ -277,10 +343,10 @@ if __name__ == '__main__':
     # time.sleep(2)
     # abstract_service.stop()
 
-    sleep_service: SleepService = SleepService()
-    sleep_service.start()
-    time.sleep(2)
-    # sleep_service.stop()
-    _logger.info(sleep_service)
-    sleep_service.restart()
-    _logger.info(sleep_service)
+    # sleep_service: SleepService = SleepService()
+    # sleep_service.start()
+    # time.sleep(2)
+    # # sleep_service.stop()
+    # _logger.info(sleep_service)
+    # sleep_service.restart()
+    # _logger.info(sleep_service)
