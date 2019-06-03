@@ -113,17 +113,24 @@ def watch_pods():
 
     api = client.CoreV1Api()
 
-    w = watch.Watch()
-    for e in w.stream(api.list_namespaced_pod, 'dev', label_selector='app.kubernetes.io/instance = dev, app.kubernetes.io/name = objectstore'):
-        type = e['type']
-        print(type)
-        object: client.V1Namespace = e['object']  # object is one of type return_type
-        print(object.metadata.name)
-        # print(object)
-        raw_object = e['raw_object']  # raw_object is a dict
-        # print(raw_object)
+    args = ['dev']
 
-        # w.stop()
+    pod_list: client.V1PodList = api.list_namespaced_pod(*args, label_selector='app.kubernetes.io/instance = dev, app.kubernetes.io/name = objectstore')
+    for e in pod_list.items:
+        print('{} {}'.format(e.metadata.name, e.metadata.resource_version))
+    resource_version = pod_list.metadata.resource_version
+    print(resource_version)
+
+    timeout = 10
+    while True:
+        print('watch {}'.format(resource_version))
+        stream = watch.Watch().stream(api.list_namespaced_pod, 'dev', label_selector='app.kubernetes.io/instance = dev, app.kubernetes.io/name = objectstore', resource_version=resource_version, timeout_seconds=timeout)
+        # resource_version = stream.metadata.resource_version
+        for e in stream:
+            type = e['type']
+            print(type)
+            v1_pod: client.V1Pod = e['object']  # object is one of type return_type
+            print('{} {}'.format(v1_pod.metadata.name, v1_pod.metadata.resource_version))
 
 
 def watch_namespace():
@@ -132,17 +139,16 @@ def watch_namespace():
 
     api = client.CoreV1Api()
 
-    w = watch.Watch()
-    for e in w.stream(api.list_namespace):
-        type = e['type']
-        print(type)
-        object: client.V1Namespace = e['object']  # object is one of type return_type
-        print(object.metadata.name)
-        # print(object)
-        raw_object = e['raw_object']  # raw_object is a dict
-        # print(raw_object)
+    resource_version = ""
 
-        # w.stop()
+    while True:
+        print('watch')
+        stream = watch.Watch().stream(api.list_namespace, resource_version=resource_version, timeout_seconds=5)
+        resource_version = stream.metadata.resource_version
+
+        for event in stream:
+            t = event["type"]
+            obj = event["object"]
 
 
 if __name__ == '__main__':

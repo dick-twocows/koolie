@@ -2,6 +2,7 @@ import contextlib
 import enum
 import logging
 import multiprocessing
+import multiprocessing.connection
 import os
 import queue
 import signal
@@ -86,7 +87,7 @@ class AbstractService(contextlib.AbstractContextManager):
         if self.__name is None:
             self.__name = str(uuid.uuid4())
 
-        self.__rlock = threading.RLock()
+        self._rlock = threading.RLock()
 
         self.__state: ServiceState = ServiceState.CREATED
 
@@ -149,7 +150,7 @@ class AbstractService(contextlib.AbstractContextManager):
     def _state(self, state: ServiceState):
         """Change the state to the given state."""
         _logger.debug('Change [{}] state from [{}] to [{}].'.format(self.name(), self.state(), state))
-        with self.__rlock:
+        with self._rlock:
             self.__state = state
 
     def pending_state(self) -> ServiceState:
@@ -159,7 +160,7 @@ class AbstractService(contextlib.AbstractContextManager):
     def _pending_state(self, pending_state: ServiceState):
         """Change the pending state to the given state."""
         _logger.debug('Change [{}] pending state [{}] -> [{}].'.format(self.name(), self.pending_state(), pending_state))
-        with self.__rlock:
+        with self._rlock:
             self.__pending_state = pending_state
 
     def duration(self, duration):
@@ -173,7 +174,7 @@ class AbstractService(contextlib.AbstractContextManager):
         """Restart the service."""
         _logger.info('Restart [{}].'.format(self.name()))
         try:
-            with self.__rlock:
+            with self._rlock:
                 self.stop()
                 self.start()
         except Exception as exception:
@@ -183,7 +184,7 @@ class AbstractService(contextlib.AbstractContextManager):
         """Start the service."""
         _logger.info('Start [{}].'.format(self.name()))
         try:
-            with self.__rlock:
+            with self._rlock:
                 if self.state() in {ServiceState.CREATED, ServiceState.STOPPED}:
                     _logger.debug('Adding signal handlers [{}].'.format(self.signal_handlers.keys()))
                     for signum, handle in self.signal_handlers.items():
@@ -202,7 +203,7 @@ class AbstractService(contextlib.AbstractContextManager):
         """Stop the service."""
         _logger.info('Stop [{}].'.format(self.name()))
         try:
-            with self.__rlock:
+            with self._rlock:
                 if self.__state in {ServiceState.STARTED}:
                     self.__pending_state = ServiceState.STOPPED
                     self.before_stop()
@@ -220,6 +221,34 @@ class AbstractService(contextlib.AbstractContextManager):
         return 'Name [{}] State [{}/{}] PID [{}]'.format(self.name(), self.state(), self.pending_state(), os.getpid())
 
 
+class ServicePacket(object):
+
+    def __init__(self) -> None:
+        super().__init__()
+
+
+class StatePacket(ServicePacket):
+
+    def __init__(self, state : ServiceState) -> None:
+        super().__init__()
+
+        self.__state = state
+
+    def state(self) -> ServiceState:
+        return self.__state
+
+
+class PendingStatePacket(ServicePacket):
+
+    def __init__(self, pending_state: ServiceState) -> None:
+        super().__init__()
+
+        self.__pending_state = pending_state
+
+    def pending_state(self) -> ServiceState:
+        return self.__pending_state
+
+
 class ProcessService(AbstractService):
 
     def __init__(self, **kwargs) -> None:
@@ -231,16 +260,56 @@ class ProcessService(AbstractService):
         self.__process: multiprocessing.Process = None
 
     def start(self):
-        super().start()
+        with self._rlock:
+            if self.start_process():
+                super().start()
+                return True
+
+            return False
+
+    def stop(self):
+        with self._rlock:
+            self.stop_process()
+            super().stop()
+
+    def start_process(self) -> bool:
+        _logger.debug('start_process()')
+        x: multiprocessing.connection.Connection = None
         self.__parent_connection, self.__child_connection = multiprocessing.Pipe(duplex=True)
-        self.__process = multiprocessing.Process(group=None, target=self.go, args=[self.__child_connection])
+        self.__process = multiprocessing.Process(group=None, target=self.process, args=[self.__child_connection])
         self.__process.start()
+        received: typing.Tuple[bool, ServiceState] = self.wait_for_recv(self.__parent_connection, expected={StatePacket})
+        if received[0] and received[1] == ServiceState.STARTED:
+            return True
 
-    def before_stop(self):
+        return False
+
+    def stop_process(self) -> bool:
         self.__parent_connection.send(ServiceState.STOPPED)
-        self.__process.join()
+        received: typing.Tuple[bool, ServiceState] = self.wait_for_recv(self.__parent_connection, expected={StatePacket})
+        if received[0] and received[1] == ServiceState.STOPPED:
+            return True
 
-    def go(self, child_connection):
+        return False
+
+    def terminate_process(self):
+        self.__process.terminate()
+
+    def stop_or_terminate_process(self):
+        if not self.stop_process():
+            self.terminate_process()
+
+    def wait_for_recv(self, c: multiprocessing.connection.Connection, timeout: int = 10, expected: typing.Set[typing.Type[ServicePacket]] = None) -> typing.Tuple[bool, ServicePacket]:
+        _logger.debug('wait_for_recv()')
+        if c.poll(timeout):
+            received = c.recv()
+            if expected is not None:
+                if type(received) in expected:
+                    return True, received
+                return False, received
+        return False, None
+
+    def process(self, child_connection):
         pass
 
 
@@ -355,12 +424,14 @@ if __name__ == '__main__':
         def __init__(self, **kwargs) -> None:
             super().__init__(**kwargs)
 
-        def go(self, child_connection):
+        def process(self, child_connection: multiprocessing.connection.Connection):
+            child_connection.send(StatePacket(ServiceState.STARTED))
             while True:
                 print('Hello')
                 if child_connection.poll(timeout=1):
                     print(child_connection.recv())
                     break
+            child_connection.send(StatePacket(ServiceState.STOPPED))
 
 
     process_service = Hello()
