@@ -8,6 +8,21 @@ import traceback
 _logger = logging.getLogger(__name__)
 
 
+def system_info() -> dict:
+    return {
+        'os': {
+            'PID': os.getpid(),
+            'Name': os.name,
+            'uname': os.uname(),
+            'CPU_Count': os.cpu_count()
+        },
+        'sys': {
+            'implementation': sys.implementation,
+            'executable': sys.executable,
+            'allocated_blocks': sys.getallocatedblocks()
+        }
+    }
+
 def get_from_kwargs(k: str, v: str = None, **kwargs):
     if k in kwargs.keys():
         _logger.debug('Returning [{}]'.format(k))

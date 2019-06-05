@@ -1,3 +1,7 @@
+from pickle import _load
+
+import koolie.tools.common
+
 import contextlib
 import enum
 import logging
@@ -24,7 +28,21 @@ Handles = typing.Mapping[str, Handle]
 _sig_handles: typing.Mapping[int, Handles] = dict()
 
 
+def add_sig_handles(name: str, handles: typing.Mapping[int, Handle]):
+    assert isinstance(name, str)
+    assert isinstance(handles, dict)
+
+    for signum, handle in handles.items():
+        add_sig_handle(signum, name, handle)
+
+
 def add_sig_handle(signum: int, name: str, handle: Handle):
+    _logger.debug('add_sig_handle() [{}] [{}] [{}]'.format(signum, name, handle))
+
+    assert isinstance(signum, int)
+    assert isinstance(name, str)
+    assert isinstance(handle, typing.Callable)
+
     with _sig_rlock:
         try:
             handles: Handles = _sig_handles.get(signum)
@@ -42,6 +60,10 @@ def add_sig_handle(signum: int, name: str, handle: Handle):
 
 
 def remove_sig_handles(name: str):
+    _logger.debug('remove_sig_handles() [{}]'.format(name))
+
+    assert isinstance(name, str)
+
     with _sig_rlock:
         handles: Handles
         for handles in _sig_handles.values():
@@ -49,19 +71,26 @@ def remove_sig_handles(name: str):
 
 
 def go_sig_handle(signum: int, frame):
-    _logger.info('{}.'.format(signal.Signals(signum).name))
+    _logger.debug('go_sig_handle [{}]'.format(signal.Signals(signum).name))
+
     with _sig_rlock:
         stack = traceback.extract_stack(frame)
         _logger.debug(stack)
         handles: Handles = _sig_handles.get(signum)
         if handles is None:
-            _logger.debug('No handles defined for [{}].'.format(signum))
+            _logger.warning('No handles defined for [{}].'.format(signum))
         else:
             for name, handle in handles.copy().items():  # Use copy() to avoid 'RuntimeError: dictionary changed size during iteration'
                 try:
                     handle(signum)
                 except Exception as exception:
                     _logger.warning('Exception [{}] calling handler [{}] for [{}].'.format(exception, name, signum))
+
+
+class ServiceException(Exception):
+
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
 
 
 class ServiceState(enum.Enum):
@@ -71,12 +100,12 @@ class ServiceState(enum.Enum):
     STOPPED = 4
 
 
-class AbstractService(contextlib.AbstractContextManager):
+class Service(contextlib.AbstractContextManager):
 
     """Abstract service class which provides start() and stop() methods.
     Work is performed in the go() method which is started in its own thread."""
 
-    NAME: str = 'abstract_service_name'
+    NAME: str = 'service_name'
 
     def __init__(self, **kwargs) -> None:
         super().__init__()
@@ -84,6 +113,7 @@ class AbstractService(contextlib.AbstractContextManager):
         self._kwargs = kwargs
 
         self.__name = self.get_kv(self.NAME)
+        assert self.__name is None or isinstance(self.__name, str)
         if self.__name is None:
             self.__name = str(uuid.uuid4())
 
@@ -134,6 +164,9 @@ class AbstractService(contextlib.AbstractContextManager):
     def __exit__(self, exc_type, exc_value, traceback):
         self.stop()
 
+    def kv(self) -> typing.Mapping[str, object]:
+        return self._kwargs
+
     def get_kv(self, k: str, v: object = None) -> object:
         return self._kwargs.get(k, v)
 
@@ -147,11 +180,17 @@ class AbstractService(contextlib.AbstractContextManager):
         """The state of the service."""
         return self.__state
 
-    def _state(self, state: ServiceState):
+    def _state(self, state: ServiceState, **kwargs):
         """Change the state to the given state."""
-        _logger.debug('Change [{}] state from [{}] to [{}].'.format(self.name(), self.state(), state))
+        _logger.debug('state() [{}] [{}] -> [{}]'.format(self.name(), self.state(), state))
         with self._rlock:
             self.__state = state
+
+            clear_pending_state = kwargs.get('clear_pending_state', False)
+            assert isinstance(clear_pending_state, bool)
+
+            if clear_pending_state:
+                self._pending_state(None)
 
     def pending_state(self) -> ServiceState:
         """The pending state of the service."""
@@ -159,66 +198,75 @@ class AbstractService(contextlib.AbstractContextManager):
 
     def _pending_state(self, pending_state: ServiceState):
         """Change the pending state to the given state."""
-        _logger.debug('Change [{}] pending state [{}] -> [{}].'.format(self.name(), self.pending_state(), pending_state))
+        _logger.debug('pending_state() [{}] [{}] -> [{}]'.format(self.name(), self.pending_state(), pending_state))
         with self._rlock:
             self.__pending_state = pending_state
 
-    def duration(self, duration):
-        """Run the service for the given duration."""
-        _logger.info('Duration [{}] [{}].'.format(self.name(), duration))
-        self.start()
-        time.sleep(duration)
-        self.stop()
-
-    def restart(self):
-        """Restart the service."""
-        _logger.info('Restart [{}].'.format(self.name()))
-        try:
-            with self._rlock:
-                self.stop()
-                self.start()
-        except Exception as exception:
-            _logger.warning('Failed to start with exception [{}].'.format(exception))
-
     def start(self):
         """Start the service."""
-        _logger.info('Start [{}].'.format(self.name()))
+        _logger.debug('start() [{}]'.format(self.name()))
         try:
             with self._rlock:
                 if self.state() in {ServiceState.CREATED, ServiceState.STOPPED}:
-                    _logger.debug('Adding signal handlers [{}].'.format(self.signal_handlers.keys()))
-                    for signum, handle in self.signal_handlers.items():
-                        add_sig_handle(signum, self.__name, handle)
-                    self.before_start()
-                    self._state(ServiceState.STARTED)
-                    self._pending_state(None)
+                    self._pending_state(ServiceState.STARTED)
+                    add_sig_handles(self.__name, self.signal_handlers)
+                    self.on_start()
+                    self._state(ServiceState.STARTED, clear_pending_state=True)
         except Exception as exception:
-            _logger.warning('Failed to start with exception [{}].'.format(exception))
-
-    def before_start(self):
-        """Called by start() before the state is change to STARTED."""
-        pass
+            koolie.tools.common.log_exception(exception, logger=_logger)
+            self._state(ServiceState.EXCEPTION, clear_pending_state=True)
 
     def stop(self):
         """Stop the service."""
-        _logger.info('Stop [{}].'.format(self.name()))
+        _logger.debug('stop() [{}]'.format(self.name()))
         try:
             with self._rlock:
                 if self.__state in {ServiceState.STARTED}:
-                    self.__pending_state = ServiceState.STOPPED
-                    self.before_stop()
-                    self._state(ServiceState.STOPPED)
-                    self._pending_state(None)
+                    self._pending_state(ServiceState.STOPPED)
+                    self.on_stop()
+                    self._state(ServiceState.STOPPED, clear_pending_state=True)
                     remove_sig_handles(self.name())
         except Exception as exception:
-            _logger.warning('Failed to stop with exception [{}].'.format(exception))
+            koolie.tools.common.log_exception(exception, logger=_logger)
+            self._state(ServiceState.EXCEPTION, clear_pending_state=True)
 
-    def before_stop(self):
+    def on_start(self):
+        """Called by start() before the state is change to STARTED."""
+        pass
+
+    def on_stop(self):
         """Called by stop() before the state is change to STOPPED."""
         pass
 
     def __str__(self) -> str:
         return 'Name [{}] State [{}/{}] PID [{}]'.format(self.name(), self.state(), self.pending_state(), os.getpid())
+
+
+def duration(service: Service, seconds: float):
+    """Run the given service for the given duration."""
+    _logger.debug('duration() [{}]'.format(seconds))
+
+    assert isinstance(service, Service)
+    assert isinstance(seconds, float)
+
+    service.start()
+    try:
+        time.sleep(seconds)
+    finally:
+        service.stop()
+
+
+def restart(self, service: Service):
+    """Restart the given service."""
+    _logger.debug('restart() [{}]'.format(service.name()))
+
+    assert isinstance(service, Service)
+
+    try:
+        self.stop()
+        self.start()
+    except Exception as exception:
+        koolie.tools.common.log_exception(exception, _logger)
 
 
 class ServicePacket(object):
@@ -249,9 +297,17 @@ class PendingStatePacket(ServicePacket):
         return self.__pending_state
 
 
-class ProcessService(AbstractService):
+class ProcessService(Service):
 
     def __init__(self, **kwargs) -> None:
+        """
+
+        :param kwargs:
+            rlock
+            queue
+            pipe
+            manager
+        """
         super().__init__(**kwargs)
 
         self.__parent_connection: multiprocessing.connection.Connection = None
@@ -259,61 +315,76 @@ class ProcessService(AbstractService):
 
         self.__process: multiprocessing.Process = None
 
-    def start(self):
-        with self._rlock:
-            if self.start_process():
-                super().start()
-                return True
+    def on_start(self):
+        super().on_start()
 
-            return False
+    def on_stop(self):
+        super().on_stop()
 
-    def stop(self):
-        with self._rlock:
-            self.stop_process()
-            super().stop()
+    def on_start(self):
+        _logger.debug('on_start()')
+        self.start_process()
 
-    def start_process(self) -> bool:
+    def on_stop(self):
+        _logger.debug('on_stop()')
+        self.stop_or_terminate_process()
+
+    def rlock(self) -> multiprocessing.RLock:
+        return self.get_kv('rlock')
+
+    def queue(self) -> multiprocessing.Queue:
+        return self.get_kv('queue')
+
+    def start_process(self):
         _logger.debug('start_process()')
-        x: multiprocessing.connection.Connection = None
-        self.__parent_connection, self.__child_connection = multiprocessing.Pipe(duplex=True)
-        self.__process = multiprocessing.Process(group=None, target=self.process, args=[self.__child_connection])
+        self.__process = multiprocessing.Process(group=None, target=self.process, **self.kv())
         self.__process.start()
-        received: typing.Tuple[bool, ServiceState] = self.wait_for_recv(self.__parent_connection, expected={StatePacket})
-        if received[0] and received[1] == ServiceState.STARTED:
-            return True
 
-        return False
-
-    def stop_process(self) -> bool:
-        self.__parent_connection.send(ServiceState.STOPPED)
-        received: typing.Tuple[bool, ServiceState] = self.wait_for_recv(self.__parent_connection, expected={StatePacket})
-        if received[0] and received[1] == ServiceState.STOPPED:
-            return True
-
-        return False
+    def stop_process(self):
+        _logger.debug('stop_process()')
 
     def terminate_process(self):
+        _logger.debug('terminate_process()')
         self.__process.terminate()
 
     def stop_or_terminate_process(self):
-        if not self.stop_process():
+        _logger.debug('stop_or_terminate_process()')
+        try:
+            self.stop_process()
+        except ServiceException as service_exception:
+            koolie.tools.common.log_exception(service_exception, logger=_logger)
             self.terminate_process()
 
-    def wait_for_recv(self, c: multiprocessing.connection.Connection, timeout: int = 10, expected: typing.Set[typing.Type[ServicePacket]] = None) -> typing.Tuple[bool, ServicePacket]:
+    def wait_for_recv(self, c: multiprocessing.connection.Connection, **kwargs) -> typing.Tuple[bool, ServicePacket]:
         _logger.debug('wait_for_recv()')
-        if c.poll(timeout):
-            received = c.recv()
-            if expected is not None:
-                if type(received) in expected:
-                    return True, received
-                return False, received
-        return False, None
 
-    def process(self, child_connection):
+        timeout = kwargs.get('timeout')
+        assert timeout is None or isinstance(timeout, float)
+        _logger.debug('timeout = [{}]'.format(timeout))
+
+        expected = kwargs.get('expected', None)
+        assert expected is None or isinstance(expected, set)
+        _logger.debug('expected = [{}]'.format(expected))
+
+        while True:
+            c.poll(timeout)
+            received = c.recv()
+            _logger.debug('received = [{}]'.format(received))
+
+            if expected is None:
+                return True, received
+
+            if type(received) in expected:
+                return True, received
+
+            _logger.debug('Skipping received.')
+
+    def process(self, **kwargs):
+        _logger.debug('process() [{}]'.format(kwargs))
         pass
 
 
-class SleepService(AbstractService):
+class SleepService(Service):
 
     SLEEP_INTERVAL = 'sleep_interval'
     SLEEP_INTERVAL_DEFAULT = 1
@@ -358,7 +429,7 @@ class SleepService(AbstractService):
         return '{}\nSleep [{}] Wake [{}]'.format(super().__str__(), self.sleep_interval(), self.wake_interval())
 
 
-class QueueService(AbstractService):
+class QueueService(Service):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
@@ -414,33 +485,68 @@ def test_queue_service():
     add.stop()
 
 
-if __name__ == '__main__':
-    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+def test_service():
+    duration(Service(), 5.0)
 
-    _logger.info('PID is [{}].'.format(os.getpid()))
 
-    class Hello(ProcessService):
+def test_process_service():
+
+    class Sleep(ProcessService):
 
         def __init__(self, **kwargs) -> None:
             super().__init__(**kwargs)
 
-        def process(self, child_connection: multiprocessing.connection.Connection):
-            child_connection.send(StatePacket(ServiceState.STARTED))
-            while True:
-                print('Hello')
-                if child_connection.poll(timeout=1):
-                    print(child_connection.recv())
-                    break
-            child_connection.send(StatePacket(ServiceState.STOPPED))
+        def on_stop(self):
+            value: multiprocessing.Value = self.kv().get('stop')
+            with value.get_lock():
+                value.value = True
+
+        def process(self, **kwargs):
+            _logger.debug('process')
+            value: multiprocessing.Value = self.kv().get('stop')
+            stop = True
+            with value.get_lock():
+                stop = value.value
+            while not stop:
+                _logger.debug('sleeping...')
+                time.sleep(1)
+                with value.get_lock():
+                    stop = value.value
+
+    duration(Sleep(stop=multiprocessing.Value('b', False)), 2.0)
 
 
-    process_service = Hello()
-    print(process_service)
-    process_service.start()
-    print(process_service)
-    time.sleep(2)
-    process_service.stop()
-    print(process_service)
+if __name__ == '__main__':
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+
+    _logger.info(koolie.tools.common.system_info())
+
+    # test_service()
+
+    test_process_service()
+
+    # class Hello(ProcessService):
+    #
+    #     def __init__(self, **kwargs) -> None:
+    #         super().__init__(**kwargs)
+    #
+    #     def process(self, child_connection: multiprocessing.connection.Connection):
+    #         child_connection.send(StatePacket(ServiceState.STARTED))
+    #         while True:
+    #             print('Hello')
+    #             if child_connection.poll(timeout=1):
+    #                 print(child_connection.recv())
+    #                 break
+    #         child_connection.send(StatePacket(ServiceState.STOPPED))
+    #
+    #
+    # process_service = Hello()
+    # print(process_service)
+    # process_service.start()
+    # print(process_service)
+    # time.sleep(2)
+    # process_service.stop()
+    # print(process_service)
 
     # abstract_service: AbstractService = AbstractService()
     # abstract_service.start()
