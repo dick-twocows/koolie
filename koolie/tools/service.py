@@ -2,7 +2,9 @@ from pickle import _load
 
 import koolie.tools.common
 
+import abc
 import contextlib
+import ctypes
 import enum
 import logging
 import multiprocessing
@@ -102,22 +104,19 @@ class ServiceState(enum.Enum):
 
 class Service(contextlib.AbstractContextManager):
 
-    """Abstract service class which provides start() and stop() methods.
-    Work is performed in the go() method which is started in its own thread."""
+    """Abstract service class which provides start() and stop() methods."""
 
     NAME: str = 'service_name'
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, name: str = None) -> None:
         super().__init__()
 
-        self._kwargs = kwargs
-
-        self.__name = self.get_kv(self.NAME)
-        assert self.__name is None or isinstance(self.__name, str)
-        if self.__name is None:
+        if name is None:
             self.__name = str(uuid.uuid4())
+        else:
+            self.__name = name
 
-        self._rlock = threading.RLock()
+        self.__rlock = threading.RLock()
 
         self.__state: ServiceState = ServiceState.CREATED
 
@@ -164,71 +163,63 @@ class Service(contextlib.AbstractContextManager):
     def __exit__(self, exc_type, exc_value, traceback):
         self.stop()
 
-    def kv(self) -> typing.Mapping[str, object]:
-        return self._kwargs
-
-    def get_kv(self, k: str, v: object = None) -> object:
-        return self._kwargs.get(k, v)
-
-    def has_k(self, k: str) -> bool:
-        return k in self._kwargs.keys()
-
+    @property
     def name(self) -> str:
         return self.__name
 
+    @property
+    def rlock(self) -> threading.RLock:
+        return self.__rlock
+
+    @property
     def state(self) -> ServiceState:
         """The state of the service."""
         return self.__state
 
-    def _state(self, state: ServiceState, **kwargs):
+    @state.setter
+    def state(self, state: ServiceState):
         """Change the state to the given state."""
-        _logger.debug('state() [{}] [{}] -> [{}]'.format(self.name(), self.state(), state))
-        with self._rlock:
-            self.__state = state
+        self.__state = state
 
-            clear_pending_state = kwargs.get('clear_pending_state', False)
-            assert isinstance(clear_pending_state, bool)
-
-            if clear_pending_state:
-                self._pending_state(None)
-
+    @property
     def pending_state(self) -> ServiceState:
         """The pending state of the service."""
         return self.__pending_state
 
-    def _pending_state(self, pending_state: ServiceState):
+    @pending_state.setter
+    def pending_state(self, pending_state: ServiceState):
         """Change the pending state to the given state."""
-        _logger.debug('pending_state() [{}] [{}] -> [{}]'.format(self.name(), self.pending_state(), pending_state))
-        with self._rlock:
-            self.__pending_state = pending_state
+        self.__pending_state = pending_state
 
     def start(self):
         """Start the service."""
-        _logger.debug('start() [{}]'.format(self.name()))
+        _logger.debug('start() [{}]'.format(self.name))
         try:
-            with self._rlock:
-                if self.state() in {ServiceState.CREATED, ServiceState.STOPPED}:
-                    self._pending_state(ServiceState.STARTED)
+            with self.rlock:
+                if self.state in {ServiceState.CREATED, ServiceState.STOPPED}:
+                    self.pending_state = ServiceState.STARTED
                     add_sig_handles(self.__name, self.signal_handlers)
                     self.on_start()
-                    self._state(ServiceState.STARTED, clear_pending_state=True)
+                    self.state = ServiceState.STARTED
+                    self.pending_state = None
         except Exception as exception:
             koolie.tools.common.log_exception(exception, logger=_logger)
-            self._state(ServiceState.EXCEPTION, clear_pending_state=True)
+            self.state = ServiceState.EXCEPTION
 
     def stop(self):
         """Stop the service."""
-        _logger.debug('stop() [{}]'.format(self.name()))
+        _logger.debug('stop() [{}]'.format(self.name))
         try:
-            with self._rlock:
-                if self.__state in {ServiceState.STARTED}:
-                    self._pending_state(ServiceState.STOPPED)
+            with self.rlock:
+                if self.state in {ServiceState.STARTED}:
+                    self.pending_state = ServiceState.STOPPED
                     self.on_stop()
-                    self._state(ServiceState.STOPPED, clear_pending_state=True)
-                    remove_sig_handles(self.name())
+                    self.state = ServiceState.STOPPED
+                    self.pending_state = None
+                    remove_sig_handles(self.name)
         except Exception as exception:
             koolie.tools.common.log_exception(exception, logger=_logger)
-            self._state(ServiceState.EXCEPTION, clear_pending_state=True)
+            self.state = ServiceState.EXCEPTION
 
     def on_start(self):
         """Called by start() before the state is change to STARTED."""
@@ -239,7 +230,7 @@ class Service(contextlib.AbstractContextManager):
         pass
 
     def __str__(self) -> str:
-        return 'Name [{}] State [{}/{}] PID [{}]'.format(self.name(), self.state(), self.pending_state(), os.getpid())
+        return 'Name [{}] State [{}/{}] PID [{}]'.format(self.name, self.state, self.pending_state, os.getpid())
 
 
 def duration(service: Service, seconds: float):
@@ -269,57 +260,20 @@ def restart(self, service: Service):
         koolie.tools.common.log_exception(exception, _logger)
 
 
-class ServicePacket(object):
-
-    def __init__(self) -> None:
-        super().__init__()
-
-
-class StatePacket(ServicePacket):
-
-    def __init__(self, state : ServiceState) -> None:
-        super().__init__()
-
-        self.__state = state
-
-    def state(self) -> ServiceState:
-        return self.__state
-
-
-class PendingStatePacket(ServicePacket):
-
-    def __init__(self, pending_state: ServiceState) -> None:
-        super().__init__()
-
-        self.__pending_state = pending_state
-
-    def pending_state(self) -> ServiceState:
-        return self.__pending_state
-
-
 class ProcessService(Service):
 
-    def __init__(self, **kwargs) -> None:
-        """
-
-        :param kwargs:
-            rlock
-            queue
-            pipe
-            manager
-        """
-        super().__init__(**kwargs)
-
-        self.__parent_connection: multiprocessing.connection.Connection = None
-        self.__child_connection: multiprocessing.connection.Connection = None
+    def __init__(self, name: str = None) -> None:
+        super().__init__(name)
 
         self.__process: multiprocessing.Process = None
 
-    def on_start(self):
-        super().on_start()
+    @property
+    def process(self) -> multiprocessing.Process:
+        return self.__process
 
-    def on_stop(self):
-        super().on_stop()
+    @process.setter
+    def process(self, process: multiprocessing.Process):
+        self.__process = process
 
     def on_start(self):
         _logger.debug('on_start()')
@@ -329,19 +283,13 @@ class ProcessService(Service):
         _logger.debug('on_stop()')
         self.stop_or_terminate_process()
 
-    def rlock(self) -> multiprocessing.RLock:
-        return self.get_kv('rlock')
-
-    def queue(self) -> multiprocessing.Queue:
-        return self.get_kv('queue')
-
+    @abc.abstractmethod
     def start_process(self):
-        _logger.debug('start_process()')
-        self.__process = multiprocessing.Process(group=None, target=self.process, **self.kv())
-        self.__process.start()
+        pass
 
+    @abc.abstractmethod
     def stop_process(self):
-        _logger.debug('stop_process()')
+        pass
 
     def terminate_process(self):
         _logger.debug('terminate_process()')
@@ -355,134 +303,49 @@ class ProcessService(Service):
             koolie.tools.common.log_exception(service_exception, logger=_logger)
             self.terminate_process()
 
-    def wait_for_recv(self, c: multiprocessing.connection.Connection, **kwargs) -> typing.Tuple[bool, ServicePacket]:
-        _logger.debug('wait_for_recv()')
 
-        timeout = kwargs.get('timeout')
-        assert timeout is None or isinstance(timeout, float)
-        _logger.debug('timeout = [{}]'.format(timeout))
+class ValueProcessService(ProcessService):
 
-        expected = kwargs.get('expected', None)
-        assert expected is None or isinstance(expected, set)
-        _logger.debug('expected = [{}]'.format(expected))
+    def __init__(self, name: str = None):
+        super().__init__(name)
 
-        while True:
-            c.poll(timeout)
-            received = c.recv()
-            _logger.debug('received = [{}]'.format(received))
+        self.__value = multiprocessing.Value(ctypes.c_bool, False)
 
-            if expected is None:
-                return True, received
+    @property
+    def _value(self) -> multiprocessing.Value:
+        """Private getter for the underlying 'multiprocessing.Value'."""
+        return self.__value
 
-            if type(received) in expected:
-                return True, received
+    @property
+    def value(self) -> bool:
+        with self._value.get_lock():
+            return self._value.value
 
-            _logger.debug('Skipping received.')
+    @value.setter
+    def value(self, value: bool):
+        with self._value.get_lock():
+            self._value.value = value
 
-    def process(self, **kwargs):
-        _logger.debug('process() [{}]'.format(kwargs))
+    def start_process(self):
+        self.process = multiprocessing.Process(group=None, target=self.go)
+        self.process.start()
+
+    def stop_process(self):
+        _logger.debug('stop_process()')
+
+        self.value = True
+        attempt = 0
+        while self.process.exitcode is None and attempt < 3:
+            attempt += 1
+            _logger.debug('attempt = [{}]'.format(attempt))
+            self.process.join(10)
+
+        if self.process.exitcode is None or self.process.exitcode != 0:
+            raise ServiceException()
+
+    @abc.abstractmethod
+    def go(self, value: multiprocessing.Value):
         pass
-
-
-class SleepService(Service):
-
-    SLEEP_INTERVAL = 'sleep_interval'
-    SLEEP_INTERVAL_DEFAULT = 1
-
-    WAKE_INTERVAL = 'wake_interval'
-    WAKE_INTERVAL_DEFAULT = 10
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-        self.__sleep_interval: int = self.get_kv(self.SLEEP_INTERVAL, self.SLEEP_INTERVAL_DEFAULT)
-        self.__wake_interval: int = self.get_kv(self.WAKE_INTERVAL, self.WAKE_INTERVAL_DEFAULT)
-
-        self.__wake_count: int = 0
-
-    def sleep_interval(self) -> int:
-        return self.__sleep_interval
-
-    def wake_interval(self) -> int:
-        return self.__wake_interval
-
-    def go(self):
-        """Alternate between calling wake() and sleep()."""
-        sleep_interval = self.sleep_interval()
-        wake_interval = 0  # Causes the wake() call to be made when we enter the while loop.
-        while self.state() is ServiceState.STARTED and self.pending_state() is not ServiceState.STOPPED:
-            try:
-                wake_interval -= sleep_interval
-                if wake_interval <= 0:
-                    wake_interval = self.wake_interval()
-                    self.wake()
-                time.sleep(sleep_interval)
-            except Exception as exception:
-                _logger.warning('Exception in go() [{}].'.format(exception))
-
-    def wake(self):
-        """Called from go() after sleeping, override to do something every interval."""
-        self.__wake_count += 1
-        pass
-
-    def __str__(self) -> str:
-        return '{}\nSleep [{}] Wake [{}]'.format(super().__str__(), self.sleep_interval(), self.wake_interval())
-
-
-class QueueService(Service):
-
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
-
-        self._queue: queue.Queue = None
-
-        self._producer_thread: threading.Thread = None
-
-    def go(self):
-        _logger.debug('go()')
-        self._queue = queue.Queue()
-        self._producer_thread = threading.Thread(group=None, target=self.producer)
-        self._producer_thread.start()
-        while self.state() is ServiceState.STARTED and self.pending_state() is not ServiceState.STOPPED:
-            try:
-                item = self._queue.get(block=True, timeout=1)
-                self.item(item)
-                self._queue.task_done()
-            except queue.Empty as empty:
-                # _logger.debug('empty')
-                pass
-        _logger.debug('go() END')
-
-    def producer(self):
-        pass
-
-    def item(self, item):
-        pass
-
-
-def test_queue_service():
-    class Add(QueueService):
-
-        def __init__(self, **kwargs) -> None:
-            super().__init__(**kwargs)
-
-        def producer(self):
-            _logger.debug('producer()')
-            i = 0
-            while self.state() is ServiceState.STARTED and self.pending_state() is not ServiceState.STOPPED:
-                i += 1
-                _logger.debug('put() {}'.format(i))
-                self._queue.put(i)
-                time.sleep(1)
-
-        def item(self, item):
-            _logger.debug('item()')
-            print(item)
-
-    add = Add(wake_interval=1)
-    add.start()
-    time.sleep(10)
-    add.stop()
 
 
 def test_service():
@@ -491,29 +354,25 @@ def test_service():
 
 def test_process_service():
 
-    class Sleep(ProcessService):
+    class Sleep(ValueProcessService):
 
-        def __init__(self, **kwargs) -> None:
-            super().__init__(**kwargs)
+        def __init__(self, name: str = None) -> None:
+            super().__init__(name)
 
-        def on_stop(self):
-            value: multiprocessing.Value = self.kv().get('stop')
-            with value.get_lock():
-                value.value = True
+        def go(self):
+            _logger.debug('go()')
+            try:
+                while not self.value:
+                    _logger.debug('sleeping...')
+                    time.sleep(1)
+                _logger.debug('finished')
+            except Exception as exception:
+                koolie.tools.common.log_exception(exception, logger=_logger)
 
-        def process(self, **kwargs):
-            _logger.debug('process')
-            value: multiprocessing.Value = self.kv().get('stop')
-            stop = True
-            with value.get_lock():
-                stop = value.value
-            while not stop:
-                _logger.debug('sleeping...')
-                time.sleep(1)
-                with value.get_lock():
-                    stop = value.value
-
-    duration(Sleep(stop=multiprocessing.Value('b', False)), 2.0)
+    duration(
+        Sleep(),
+        5.0
+    )
 
 
 if __name__ == '__main__':
@@ -524,39 +383,3 @@ if __name__ == '__main__':
     # test_service()
 
     test_process_service()
-
-    # class Hello(ProcessService):
-    #
-    #     def __init__(self, **kwargs) -> None:
-    #         super().__init__(**kwargs)
-    #
-    #     def process(self, child_connection: multiprocessing.connection.Connection):
-    #         child_connection.send(StatePacket(ServiceState.STARTED))
-    #         while True:
-    #             print('Hello')
-    #             if child_connection.poll(timeout=1):
-    #                 print(child_connection.recv())
-    #                 break
-    #         child_connection.send(StatePacket(ServiceState.STOPPED))
-    #
-    #
-    # process_service = Hello()
-    # print(process_service)
-    # process_service.start()
-    # print(process_service)
-    # time.sleep(2)
-    # process_service.stop()
-    # print(process_service)
-
-    # abstract_service: AbstractService = AbstractService()
-    # abstract_service.start()
-    # time.sleep(2)
-    # abstract_service.stop()
-
-    # sleep_service: SleepService = SleepService()
-    # sleep_service.start()
-    # time.sleep(2)
-    # # sleep_service.stop()
-    # _logger.info(sleep_service)
-    # sleep_service.restart()
-    # _logger.info(sleep_service)
