@@ -247,6 +247,22 @@ def duration(service: Service, seconds: float):
         service.stop()
 
 
+def heartbeat(service: Service, seconds: float):
+    """Run the given service forever using the given heartbeat."""
+    _logger.debug('duration() [{}]'.format(seconds))
+
+    assert isinstance(service, Service)
+    assert isinstance(seconds, float)
+
+    service.start()
+    try:
+        while service.state in {ServiceState.STARTED}:
+            time.sleep(seconds)
+            _logger.debug('heartbeat = [{}]'.format(float))
+    finally:
+        service.stop()
+
+
 def restart(self, service: Service):
     """Restart the given service."""
     _logger.debug('restart() [{}]'.format(service.name()))

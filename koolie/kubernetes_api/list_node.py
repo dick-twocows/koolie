@@ -1,7 +1,16 @@
+import logging
+import multiprocessing
 import os
+import sys
+import time
 import typing
 import uuid
+
 from kubernetes import client, config, watch
+
+import koolie.tools.service
+
+_logger = logging.getLogger(__name__)
 
 LABELS = typing.Dict[str, str]
 
@@ -151,9 +160,45 @@ def watch_namespace():
             obj = event["object"]
 
 
+class ListNodes(koolie.tools.service.ValueProcessService):
+
+    def __init__(self, name: str = None):
+        super().__init__(name)
+
+    def go(self):
+        _logger.debug('go()')
+
+        # config.incluster_config.load_incluster_config()
+        config.load_kube_config(config_file=os.path.expanduser('~/YellowDog/k8s/clusters/oci/uk-london-1/new_tenancy/preprod/kubeconfig'))
+
+        api = client.CoreV1Api()
+
+        def node(action: str, v1_node: client.V1Node):
+            _logger.debug('v1_node = [{}] [{}]'.format(action, v1_node.metadata.uid))
+
+        try:
+            if not self.value:
+                node_list: client.V1NodeList = api.list_node()
+                resource_version = node_list.metadata.resource_version
+                _logger.debug('resource_version = [{}]'.format(resource_version))
+                for item in node_list.items:
+                    node('ADDED', item)
+                while not self.value:
+                    stream = watch.Watch().stream(api.list_node, resource_version=resource_version, timeout_seconds=5)
+                    for item in stream:
+                        node(item['type'], item['object'])
+            _logger.debug('finished')
+        except Exception as exception:
+            koolie.tools.common.log_exception(exception, logger=_logger)
+
+
+def test_list_nodes():
+    koolie.tools.service.heartbeat(ListNodes(), 5.0)
+
+
 if __name__ == '__main__':
-    # pods()
-    # create_service()
-    # uid_label()
-    # watch_namespace()
-    watch_pods()
+    logging.basicConfig(stream=sys.stdout, level=logging.DEBUG, format='%(asctime)s %(levelname)-8s %(message)s')
+
+    _logger.info(koolie.tools.common.system_info())
+
+    test_list_nodes()
